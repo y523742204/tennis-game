@@ -1,3 +1,4 @@
+import {viewportLayout,fitCourtCamera,gesturePlacement,directionShot} from './viewport.js';
 import {ReturnStrategy} from './return-strategy.js';
 import {selectContact,recoveryPosition} from './tactics.js';
 import {createPlayer,beginStroke,updatePlayer,strokeProgress} from './player.js';
@@ -30,6 +31,28 @@ let match=new TennisMatch(),difficulty='normal',phase='menu',started=false,pause
 let lastHitter=0,bounces=0,decision=null,isServe=true,serveAttempt=1,netTouched=false;
 let plan=null,elapsed=0,acc=0,aiWait=0,turn=1,aim={x:-2,z:-4},selected='top',gauge=.5,dirty=true,hold=null;
 const wheel=$('wheel'),canvas=renderer.domElement;
+let screenLayout=null,previousViewport=null;
+function readSafeArea(){const style=getComputedStyle(document.documentElement);return Object.fromEntries(['top','right','bottom','left'].map(side=>[side,parseFloat(style.getPropertyValue('--safe-'+side))||0]))}
+function resizeCourt(){
+ const width=arena.clientWidth,height=arena.clientHeight,coarse=matchMedia('(pointer:coarse)').matches;
+ screenLayout=viewportLayout(width,height,readSafeArea(),coarse);
+ const orientationChanged=previousViewport&&(width>height)!==(previousViewport.width>previousViewport.height);
+ if(orientationChanged){cancelHold();if(started&&$('startMenu').hidden){paused=true;say('画面已旋转 · 轻触球场继续');ui()}}
+ else if(previousViewport&&Math.abs(width-previousViewport.width)>2)cancelHold();
+ previousViewport={width,height};
+ renderer.setPixelRatio(Math.min(devicePixelRatio,screenLayout.mobile?1.5:2));renderer.setSize(width,height);fitCourtCamera(camera,screenLayout,ends[0]);
+ const viewDistance=camera.position.length();scene.fog.near=Math.max(27,viewDistance-8);scene.fog.far=viewDistance+80;
+ const shadowSize=screenLayout.mobile?1024:2048;
+ if(sun.shadow.mapSize.x!==shadowSize){sun.shadow.mapSize.set(shadowSize,shadowSize);if(sun.shadow.map){sun.shadow.map.dispose();sun.shadow.map=null}renderer.shadowMap.needsUpdate=true}
+ if(hold?.ready)placeCurrentGesture();dirty=true;
+}
+function placeCurrentGesture(){
+ if(!hold||!screenLayout)return;
+ const kind=hold.mode==='serve'?'serve':'rally',p=gesturePlacement(screenLayout,hold.x,hold.y,kind),element=kind==='serve'?$('serveDial'):wheel;
+ element.style.left=p.left+'px';element.style.top=p.top+'px';element.style.transform='scale('+p.scale+')';element.style.transformOrigin='top left';
+ if(kind==='serve')hold.radius=82*p.scale;else hold.origin={x:p.left+145*p.scale,y:p.top+140*p.scale};
+}
+
 let serveSpin={x:0,y:0},pendingStroke=null,lastPreviewTime=0;
 let recoveryTargets=[null,null],recoveryDelay=[0,0];
 const returnStrategy=new ReturnStrategy();
@@ -78,6 +101,7 @@ function ready(){return (phase==='choose'||(incomingReturn()&&!returnStrategy.lo
 function cost(power,type){return 4+power*.14+(type==='top'?4:type==='slice'?2:0)}
 function ui(){
  const labels=match.labels();for(let i=0;i<2;i++){$('sets'+i).textContent=match.sets[i];$('games'+i).textContent=match.games[i];$('points'+i).textContent=labels[i];$('server'+i).style.visibility=match.server===i?'visible':'hidden'}
+ $('courtMenu').hidden=!started||!$('startMenu').hidden||!$('sideMenu').hidden;
  $('pointHeading').textContent=match.tieBreak?'TB':'分';
  $('scoreStatus').textContent=match.winner!==null?'比赛结束':match.tieBreak?'TIEBREAK / 抢七':match.decidingPoint?'GOLDEN POINT':match.points.every(p=>p>=3)?(match.points[0]===match.points[1]?'DEUCE / 平分':'ADVANTAGE / 占先'):'SET 1';
  $('serviceStatus').textContent=(match.tieBreak?'抢七':'第 '+(match.games[0]+match.games[1]+1)+' 局')+' · '+(match.server===0?'你':'电脑')+'发球 · '+(match.serviceSide===0?'一区 / 右区':'二区 / 左区')+(isServe?' · '+(serveAttempt===1?'一发':'二发')+(phase==='choose'?' · 长按旋转圆盘':''):'');
@@ -135,7 +159,7 @@ function recoverPlayers(dt,excluded=null){
   if(movePlayerTo(who,recoveryTargets[who],dt,.84))recoveryTargets[who]=null;
  }
 }
-function viewEnd(){camera.position.set(0,20,27*ends[0]);camera.lookAt(0,0,ends[0])}
+function viewEnd(){if(screenLayout)fitCourtCamera(camera,screenLayout,ends[0])}
 function prepareServe(){
  clearReturn();cancelHold();plan=null;recoveryTargets=[null,null];recoveryDelay=[0,0];contactGuide.visible=false;elapsed=0;acc=0;decision=null;bounces=0;netTouched=false;isServe=true;selected='flat';serveSpin={x:0,y:0};pendingStroke=null;
  if(match.decidingPoint&&match.sideOverride===null){
@@ -233,23 +257,18 @@ function updateServeDial(){
 function showWheel(){
  if(!hold||!ready()){cancelHold();return}hold.ready=true;hold.chargeStart=performance.now();hold.mode=servingInput()?'serve':'rally';gauge=0;
  if(servingInput()){
-  const scale=Math.min(1,(innerWidth-105)/248),width=248*scale,left=THREE.MathUtils.clamp(hold.x-width/2,10,Math.max(10,innerWidth-width-90)),top=THREE.MathUtils.clamp(hold.y-width/2,20,Math.max(20,innerHeight-width-30));
-  const dial=$('serveDial');dial.style.left=left+'px';dial.style.top=top+'px';dial.style.transform='scale('+scale+')';dial.style.transformOrigin='top left';dial.hidden=false;
-  hold.spinOrigin={x:hold.x,y:hold.y};hold.radius=82*scale;serveSpin={x:0,y:0};updateServeDial();say('拖动圆心：平击 / 上旋 / 左右侧旋；斜向可混合旋转');
+  placeCurrentGesture();$('serveDial').hidden=false;
+  hold.spinOrigin={x:hold.x,y:hold.y};serveSpin={x:0,y:0};updateServeDial();say('拖动圆心：平击 / 上旋 / 左右侧旋；斜向可混合旋转');
  }else{
-  const scale=Math.min(1,(innerWidth-105)/290),width=290*scale,height=265*scale,left=THREE.MathUtils.clamp(hold.x-width/2,10,Math.max(10,innerWidth-width-90)),top=THREE.MathUtils.clamp(hold.y-130,70,Math.max(70,innerHeight-height-40));
-  wheel.style.left=left+'px';wheel.style.top=top+'px';wheel.style.transform='scale('+scale+')';wheel.style.transformOrigin='top left';wheel.hidden=false;
-  hold.origin={x:left+145*scale,y:top+140*scale};hold.pressOrigin={x:hold.x,y:hold.y};updateNodes();say('↑ 上旋 / ↙ 平击 / ↘ 切削 · 右侧金色力量区松手 = PERFECT');
+  placeCurrentGesture();wheel.hidden=false;hold.pressOrigin={x:hold.x,y:hold.y};updateNodes();say('↑ 上旋 / ↙ 平击 / ↘ 切削 · 右侧金色力量区松手 = PERFECT');
  }
  $('powerPanel').hidden=false;dirty=true;
 }
 function updateNodes(){wheel.querySelectorAll('[data-shot]').forEach(node=>node.classList.toggle('selected',node.dataset.shot===selected))}
-function beginHold(e){if(!hold){retiredPointerId=null;ignoreNextClick=false}if(e.button!==0||!ready()||hold)return;if(e.currentTarget===canvas)aimAt(e);e.preventDefault();const surface=e.currentTarget;surface.setPointerCapture(e.pointerId);hold={surface,id:e.pointerId,x:e.clientX,y:e.clientY,ready:false,timer:setTimeout(showWheel,260)};}
+function beginHold(e){if(e.isPrimary===false)return;if(!hold){retiredPointerId=null;ignoreNextClick=false}if(e.button!==0||!ready()||hold)return;if(e.currentTarget===canvas)aimAt(e);e.preventDefault();const surface=e.currentTarget;surface.setPointerCapture(e.pointerId);hold={surface,id:e.pointerId,pointerType:e.pointerType,x:e.clientX,y:e.clientY,ready:false,timer:setTimeout(showWheel,260)};}
 function moveHold(e){
- if(!hold||e.pointerId!==hold.id||!hold.ready)return;e.preventDefault();if(hold.mode==='serve'){serveSpin=servePad((e.clientX-hold.spinOrigin.x)/hold.radius,(hold.spinOrigin.y-e.clientY)/hold.radius);updateServeDial();dirty=true;return}if(Math.hypot(e.clientX-hold.pressOrigin.x,e.clientY-hold.pressOrigin.y)<15)return;const dx=e.clientX-hold.origin.x,dy=e.clientY-hold.origin.y;
- // Three angular sectors around the visible wheel center.
- const dirs=[{type:'top',x:0,y:-1},{type:'flat',x:-.707,y:.707},{type:'slice',x:.707,y:.707}];dirs.sort((a,b)=>(dx*b.x+dy*b.y)-(dx*a.x+dy*a.y));
- if(selected!==dirs[0].type){selected=dirs[0].type;dirty=true;updateNodes()}
+ if(!hold||e.pointerId!==hold.id)return;e.preventDefault();if(!hold.ready){if(hold.pointerType==='touch'){hold.x=e.clientX;hold.y=e.clientY;aimAt(e,true)}return}if(hold.mode==='serve'){serveSpin=servePad((e.clientX-hold.spinOrigin.x)/hold.radius,(hold.spinOrigin.y-e.clientY)/hold.radius);updateServeDial();dirty=true;return}const origin=screenLayout?.mobile||hold.pointerType==='touch'?hold.pressOrigin:hold.origin;
+ const next=directionShot(e.clientX-origin.x,e.clientY-origin.y);if(next&&next!==selected){selected=next;dirty=true;updateNodes()}
 }
 function finishHold(e){
  if(!hold){if(e.pointerId===retiredPointerId){retiredPointerId=null;ignoreNextClick=true}return}
@@ -259,13 +278,13 @@ function finishHold(e){
  if(isReturn){if(returnStrategy.lock(choice)){dirty=true;say('策略已锁定 · 到达腰部击球点自动执行');ui()}return}
  if(ready())strike(0,selected,Math.round(35+gauge*60),Math.abs(gauge-.5)<=.075);
 }
-for(const surface of [canvas]){surface.addEventListener('pointerdown',beginHold);surface.addEventListener('pointermove',moveHold);surface.addEventListener('pointerup',finishHold);surface.addEventListener('pointercancel',cancelHold);surface.addEventListener('lostpointercapture',()=>{if(hold?.surface===surface)cancelHold()});surface.addEventListener('contextmenu',e=>e.preventDefault())}
+for(const surface of [canvas]){surface.addEventListener('pointerdown',beginHold);surface.addEventListener('pointermove',moveHold);surface.addEventListener('pointerup',finishHold);surface.addEventListener('pointercancel',e=>{if(hold?.id===e.pointerId)cancelHold()});surface.addEventListener('lostpointercapture',()=>{if(hold?.surface===surface)cancelHold()});surface.addEventListener('contextmenu',e=>e.preventDefault())}
 const ray=new THREE.Raycaster(),groundPlane=new THREE.Plane(new THREE.Vector3(0,1,0),0),intersection=new THREE.Vector3();
-function aimAt(e){if(!ready()||hold)return;const r=canvas.getBoundingClientRect();ray.setFromCamera(new THREE.Vector2((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1),camera);if(!ray.ray.intersectPlane(groundPlane,intersection))return;
+function aimAt(e,whilePress=false){if(!ready()||(hold&&!whilePress))return;const r=canvas.getBoundingClientRect();ray.setFromCamera(new THREE.Vector2((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1),camera);if(!ray.ray.intersectPlane(groundPlane,intersection))return;
  if(servingInput()){const sign=-ends[match.server]*(match.serviceSide===0?1:-1);aim={x:sign*THREE.MathUtils.clamp(intersection.x*sign,.4,4.1),z:-ends[0]*THREE.MathUtils.clamp(-intersection.z*ends[0],1,5.1)}}
  else aim={x:THREE.MathUtils.clamp(intersection.x,-4.2,4.2),z:-ends[0]*THREE.MathUtils.clamp(-intersection.z*ends[0],2,11.5)};dirty=true;
 }
-canvas.addEventListener('pointermove',aimAt);
+canvas.addEventListener('pointermove',e=>aimAt(e));
 function updateVisuals(now,dt){
  if(incomingReturn()&&rallyWindup?.started){const swing=human.userData.rig.swing,choice=returnStrategy.current(currentReturnChoice(now));if(swing&&choice)swing.type=choice.type}
  const animationPaused=paused||!$('startMenu').hidden||!$('sideMenu').hidden;
@@ -279,7 +298,7 @@ function updateVisuals(now,dt){
  if(hold?.ready&&!paused){const liveGauge=(1-Math.cos((now-hold.chargeStart)*.004))/2;if(Math.abs(liveGauge-gauge)>.02&&now-lastPreviewTime>100)dirty=true;gauge=liveGauge}
  const returnPreview=incomingReturn(),previewChoice=returnPreview?returnStrategy.current(currentReturnChoice(now)):null;
  aimLine.visible=(ready()||returnPreview)&&!animationPaused;
- if(aimLine.visible&&dirty&&now-lastPreviewTime>70){
+ if(aimLine.visible&&dirty&&now-lastPreviewTime>(screenLayout?.mobile?120:70)){
   dirty=false;lastPreviewTime=now;
   const shot=trajectory(0,previewChoice?.type||selected,previewChoice?.target||aim,previewChoice?.power||(hold?.ready?Math.round(35+gauge*60):65),previewChoice?previewChoice.perfect:!!hold?.ready&&Math.abs(gauge-.5)<=.075,servingInput()?serveSpin:null,returnPreview?plan.ball:null);
   aimLine.geometry.dispose();aimLine.geometry=new THREE.BufferGeometry().setFromPoints(shot.points);aimLine.computeLineDistances();marker.visible=true;marker.position.set(shot.landing?.x??aim.x,.015,shot.landing?.z??aim.z);
@@ -291,14 +310,16 @@ function updateVisuals(now,dt){
  if(pendingStroke?.serving){const u=strokeProgress(players[pendingStroke.who])||0;ball.position.y=1.3+1.3*Math.sin(Math.min(u/.72,1)*Math.PI/2);}
 }
 function next(){if(phase==='end'){openMenu();return}if(['point','fault'].includes(phase)&&!paused)prepareServe()}
-canvas.addEventListener('click',()=>{if(ignoreNextClick){ignoreNextClick=false;return}if(paused&&$('startMenu').hidden&&$('sideMenu').hidden){togglePause();return}if(['point','fault','end'].includes(phase))next()});
+canvas.addEventListener('click',e=>{if(e.isPrimary===false)return;if(ignoreNextClick){ignoreNextClick=false;return}if(paused&&$('startMenu').hidden&&$('sideMenu').hidden){togglePause();return}if(['point','fault','end'].includes(phase))next()});
 function togglePause(){if(!started||!$('startMenu').hidden||!$('sideMenu').hidden)return;cancelHold();paused=!paused;say(paused?'已暂停 · P 或点击球场恢复比赛':phase==='choose'?'长按球场准备击球':'比赛继续');ui()}
 addEventListener('keydown',e=>{if(hold?.ready&&hold.mode==='rally'&&['ArrowLeft','ArrowRight','ArrowUp'].includes(e.code)){e.preventDefault();selected=e.code==='ArrowUp'?'top':e.code==='ArrowLeft'?'flat':'slice';updateNodes();dirty=true;return}if(hold?.ready&&hold.mode==='serve'&&['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home'].includes(e.code)){e.preventDefault();serveSpin=e.code==='Home'?{x:0,y:0}:servePad(serveSpin.x+(e.code==='ArrowRight'?.2:e.code==='ArrowLeft'?-.2:0),serveSpin.y+(e.code==='ArrowUp'?.2:e.code==='ArrowDown'?-.2:0));updateServeDial();dirty=true;return}if(e.code==='Escape'&&started){if($('startMenu').hidden)openMenu();else $('resume').click();return}if(e.target.matches('input,select,button'))return;if(e.code==='KeyP')togglePause();if(e.code==='Space'){e.preventDefault();next()}});
 function openMenu(){cancelHold();paused=true;$('startMenu').hidden=false;$('resume').hidden=!started||match.winner!==null;ui()}
 $('resume').onclick=()=>{$('startMenu').hidden=true;paused=false;dirty=true;ui()};
 $('setup').onsubmit=e=>{e.preventDefault();cancelHold();match=new TennisMatch({gamesToWin:Number($('gamesSetting').value),noAd:document.querySelector('input[name="scoring"]:checked').value==='golden'});difficulty=$('difficultySetting').value;started=true;paused=false;ends=[1,-1];viewEnd();stamina=[100,100];displayedStamina=[100,100];trailingStamina=[100,100];turn=1;serveAttempt=1;pendingStroke=null;for(const p of players)p.userData.rig.swing=null;$('startMenu').hidden=true;$('sideMenu').hidden=true;prepareServe()};
 for(const node of document.querySelectorAll('[data-side]'))node.onclick=()=>{match.sideOverride=Number(node.dataset.side);$('sideMenu').hidden=true;prepareServe()};
-addEventListener('blur',()=>{cancelHold();if(phase==='flight'||phase==='ai'||phase==='stroke'){paused=true;say('已暂停 · P 继续');ui()}});addEventListener('resize',cancelHold);
-new ResizeObserver(()=>{camera.aspect=arena.clientWidth/arena.clientHeight;camera.updateProjectionMatrix();renderer.setSize(arena.clientWidth,arena.clientHeight);dirty=true}).observe(arena);
+addEventListener('blur',()=>{cancelHold();if(phase==='flight'||phase==='ai'||phase==='stroke'){paused=true;say('已暂停 · P 继续');ui()}});
+ document.addEventListener('visibilitychange',()=>{if(document.hidden){cancelHold();if(started&&['flight','ai','stroke'].includes(phase)){paused=true;ui()}}});
+$('courtMenu').onclick=openMenu;
+new ResizeObserver(resizeCourt).observe(arena);
 let last=performance.now();function tick(now){requestAnimationFrame(tick);const dt=Math.min((now-last)/1000,.05);last=now;if(!paused&&$('startMenu').hidden){if(phase==='ai'){aiWait-=dt;if(aiWait<=0)strike(1,serveAttempt===2?'top':'flat',55+Math.random()*15)}else if(phase==='stroke'){recoverPlayers(dt*.62,pendingStroke?.who)}else if(phase==='flight'){acc+=dt*.62;while(acc>=1/240&&phase==='flight'){acc-=1/240;step(1/240)}ui()}}updateVisuals(now,dt);renderer.render(scene,camera)}
 physicalBall.position.set(0,1.3,10);ui();requestAnimationFrame(tick);

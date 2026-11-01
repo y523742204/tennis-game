@@ -1,0 +1,79 @@
+import * as THREE from './vendor/three.module.js';
+const smooth=t=>t*t*(3-2*t),mix=THREE.MathUtils.lerp;
+export function createPlayer(scene,color,z,accent) {
+  const root=new THREE.Group();root.position.z=z;scene.add(root);
+  const mat=c=>new THREE.MeshStandardMaterial({color:c,roughness:.7});
+  const shirt=mat(color),trim=mat(accent),skin=mat('#eac19b'),hair=mat('#342c27'),white=mat('#faf4df'),dark=mat('#173e32');
+  function mesh(parent,geometry,material,x=0,y=0,z=0){const m=new THREE.Mesh(geometry,material);m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m}
+  const sphere=(p,r,m,x,y,z)=>mesh(p,new THREE.SphereGeometry(r,20,14),m,x,y,z);
+  const capsule=(p,r,length,m,x,y,z)=>mesh(p,new THREE.CapsuleGeometry(r,length,5,12),m,x,y,z);
+  const body=new THREE.Group();root.add(body);
+  const hips=new THREE.Group();hips.position.y=.88;body.add(hips);
+  const shorts=mesh(hips,new THREE.CylinderGeometry(.28,.31,.32,16),trim,0,.05,0);shorts.scale.z=.75;
+  const chest=new THREE.Group();chest.position.y=1.22;body.add(chest);
+  const torso=mesh(chest,new THREE.CylinderGeometry(.31,.25,.55,20),shirt);torso.scale.z=.7;
+  mesh(chest,new THREE.BoxGeometry(.43,.06,.015),trim,0,.03,-.225);
+  mesh(chest,new THREE.BoxGeometry(.1,.13,.025),white,-.14,.14,-.23);
+  sphere(chest,.11,skin,0,.34,0);
+  const collar=mesh(chest,new THREE.TorusGeometry(.12,.025,8,24),trim,0,.29,0);collar.rotation.x=Math.PI/2;
+  const head=new THREE.Group();head.position.y=1.95;body.add(head);
+  const skull=sphere(head,.34,skin,0,0,0);skull.scale.set(1,1.1,.94);
+  sphere(head,.075,skin,-.325,-.025,0);sphere(head,.075,skin,.325,-.025,0);
+  const hairBack=sphere(head,.33,hair,0,.05,.08);hairBack.scale.set(1,.95,.8);
+  // Face points towards local -Z; changing ends rotates the entire rig.
+  for(const x of [-.12,.12]){const eye=sphere(head,.061,white,x,.015,-.293);eye.scale.z=.5;sphere(head,.028,dark,x,.012,-.325);sphere(head,.01,white,x-.008,.024,-.348);const brow=mesh(head,new THREE.BoxGeometry(.09,.022,.024),hair,x,.108,-.295);brow.rotation.z=x>0?-.12:.12;}
+  sphere(head,.057,skin,0,-.055,-.326);
+  const smile=mesh(head,new THREE.TorusGeometry(.06,.009,6,16,Math.PI*.7),dark,0,-.13,-.302);smile.rotation.z=Math.PI*1.15;
+  const cap=mesh(head,new THREE.SphereGeometry(.352,24,16,0,Math.PI*2,0,Math.PI/2),trim,0,.055,0);
+  const visor=sphere(head,.24,trim,0,.07,-.3);visor.scale.set(1.35,.12,1);
+  mesh(head,new THREE.BoxGeometry(.1,.05,.02),white,0,.18,-.326);
+  function leg(x){const hip=new THREE.Group();hip.position.set(x,.84,0);body.add(hip);capsule(hip,.105,.23,skin,0,-.18,0);const knee=new THREE.Group();knee.position.y=-.35;hip.add(knee);sphere(knee,.106,skin,0,0,0);capsule(knee,.082,.22,skin,0,-.16,0);capsule(knee,.088,.09,white,0,-.29,0);const shoe=capsule(knee,.105,.14,white,0,-.37,-.07);shoe.rotation.x=Math.PI/2;mesh(knee,new THREE.BoxGeometry(.18,.045,.32),trim,0,-.43,-.07);return {hip,knee}}
+  const leftLeg=leg(-.16),rightLeg=leg(.16);
+  function arm(x){const shoulder=new THREE.Group();shoulder.position.set(x,.18,0);chest.add(shoulder);sphere(shoulder,.14,shirt,0,-.05,0);capsule(shoulder,.093,.18,skin,0,-.19,0);const elbow=new THREE.Group();elbow.position.y=-.34;shoulder.add(elbow);sphere(elbow,.095,skin,0,0,0);capsule(elbow,.078,.19,skin,0,-.17,0);capsule(elbow,.085,.035,trim,0,-.27,0);const hand=new THREE.Group();hand.position.y=-.35;elbow.add(hand);sphere(hand,.09,skin,0,-.025,0);return {shoulder,elbow,hand}}
+  const rightArm=arm(.34),leftArm=arm(-.34);
+  const racket=new THREE.Group();rightArm.hand.add(racket);
+  mesh(racket,new THREE.CylinderGeometry(.035,.04,.26,10),dark,0,-.15,0);
+  const hoop=mesh(racket,new THREE.TorusGeometry(.3,.025,8,36),trim,0,-.5,0);hoop.scale.x=.79;
+  const strings=new THREE.Group();strings.position.y=-.5;racket.add(strings);
+  const stringMat=new THREE.LineBasicMaterial({color:'#e6f0d7',transparent:true,opacity:.8});
+  for(let i=-3;i<=3;i++){const x=i*.055,hy=.28*Math.sqrt(1-x*x/(.22*.22));const vertical=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x,-hy,0),new THREE.Vector3(x,hy,0)]),stringMat);strings.add(vertical);const y=i*.065,hx=.22*Math.sqrt(1-y*y/(.28*.28));strings.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-hx,y,0),new THREE.Vector3(hx,y,0)]),stringMat));}
+  const trail=new THREE.Line(new THREE.BufferGeometry(),new THREE.LineBasicMaterial({color:'#dfef9a',transparent:true,opacity:.65}));trail.frustumCulled=false;scene.add(trail);
+  root.userData.rig={body,chest,head,leftLeg,rightLeg,leftArm,rightArm,racket,strings,trail,trailPoints:[],swing:null,clock:0,last:root.position.clone()};
+  return root;
+}
+const READY={right:[1.05,-.15,-.25],left:[.8,.2,.35],elbowR:.65,elbowL:.55,wrist:[-.3,0,.12],yaw:0,pitch:.04,bend:.1};
+function pose(type,backhand,serve,u,pad={x:0,y:0}){
+  const side=backhand?-1:1,wind=1-smooth(Math.min(u/.42,1)),follow=smooth(Math.max(0,(u-.42)/.58));
+  if(serve){
+    const reach=Math.sin(Math.min(u/.72,1)*Math.PI/2),recover=smooth(Math.max(0,(u-.72)/.28));
+    return {right:[mix(.5,2.6,reach)-recover*1.8, mix(-.65,.15,reach),-.2-recover*.4],left:[3.0*(1-recover),0,.2],elbowR:mix(1.8,.08,reach)+recover*.6,elbowL:.12+recover*.5,wrist:[-.15-pad.y*.35, .2+pad.x*reach*.85,pad.x*.2],yaw:-.4*wind+.45*follow+pad.x*.18,pitch:-.2*wind+.23*follow,bend:.4*wind};
+  }
+  const lift=type==='top'?1.1:type==='slice'?-.6:.35;
+  return {right:[(type==='slice'?2:1.05)*wind+(1.3+lift*follow)*(1-wind),side*(-1.1*wind+1.0*follow),backhand?-.95:-.55],left:backhand?[1.3,.4,.2]:[.6,-.25,.6],elbowR:.35+.7*wind,elbowL:backhand?.5:.8,wrist:[type==='slice'?.6:type==='top'?-.65:0,0,side*(.25-.6*follow)],yaw:side*(-.65*wind+.8*follow),pitch:type==='slice'?-.05:.1+follow*.12,bend:.3*(1-follow)};
+}
+export function beginStroke(player,{type='flat',backhand=false,serve=false,pad={x:0,y:0}}={}){
+  const rig=player.userData.rig;rig.swing={type,backhand,serve,pad,time:0,duration:serve?1.35:1.05,contact:serve?.72:.42,hit:false};rig.trailPoints=[];
+}
+export function updatePlayer(player,dt,{end=1,moving=false,serveReady=false,ready=false,paused=false}={}){
+  const r=player.userData.rig;r.clock+=paused?0:dt;
+  const distance=player.position.distanceTo(r.last);r.last.copy(player.position);const running=moving&&distance>.0001;
+  player.rotation.y=end===1?0:Math.PI;
+  let p={...READY},contact=false,s=r.swing;
+  if(s&&!paused){s.time+=dt;const u=Math.min(s.time/s.duration,1);p=pose(s.type,s.backhand,s.serve,u,s.pad);
+    if(!s.hit&&u>=s.contact){s.hit=true;contact=true}
+    if(u>=1)r.swing=null;
+  }else if(s){p=pose(s.type,s.backhand,s.serve,Math.min(s.time/s.duration,1),s.pad)}
+  else if(serveReady){p={...READY,right:[.3,-.5,-.45],left:[1.15,0,.15],elbowR:1.4,elbowL:.1,yaw:-.25,bend:.16}}
+  const gait=running?Math.sin(r.clock*17):0,hop=running?Math.abs(Math.sin(r.clock*17))*.075:Math.sin(r.clock*2)*.012;
+  if(running&&!s){p={...p,right:[1.0+gait*.5,-.15,-.3],left:[.8-gait*.5,.15,.3],pitch:.16,yaw:gait*.08}}
+  const damp=1-Math.exp(-dt*18),rot=(object,values)=>{for(let i=0;i<3;i++){const axis=['x','y','z'][i];object.rotation[axis]=mix(object.rotation[axis],values[i],damp)}};
+  r.body.position.y=hop-(p.bend||0)*.14+(s?.serve?Math.sin(Math.PI*THREE.MathUtils.clamp((s.time/s.duration-.35)/.55,0,1))*.16:0);r.body.rotation.z=running?gait*.035:0;
+  rot(r.chest,[p.pitch||0,p.yaw||0,0]);r.head.rotation.y=mix(r.head.rotation.y,-(p.yaw||0)*.5,damp);
+  rot(r.rightArm.shoulder,p.right);rot(r.leftArm.shoulder,p.left);rot(r.rightArm.hand,p.wrist||[0,0,0]);
+  r.rightArm.elbow.rotation.x=mix(r.rightArm.elbow.rotation.x,p.elbowR,damp);r.leftArm.elbow.rotation.x=mix(r.leftArm.elbow.rotation.x,p.elbowL,damp);
+  for(const [leg,sign] of [[r.leftLeg,1],[r.rightLeg,-1]]){leg.hip.rotation.x=gait*.65*sign-(p.bend||0)*.5;leg.hip.rotation.z=sign*.09;leg.knee.rotation.x=Math.max(0,-gait*sign)*.65+(p.bend||0);}
+  r.trail.visible=!!s&&s.time/s.duration>.23;
+  if(r.trail.visible&&!paused){player.updateMatrixWorld(true);const point=new THREE.Vector3();r.strings.getWorldPosition(point);r.trailPoints.push(point);if(r.trailPoints.length>13)r.trailPoints.shift();r.trail.geometry.dispose();r.trail.geometry=new THREE.BufferGeometry().setFromPoints(r.trailPoints);r.trail.material.color.set(s.type==='top'?'#e5ed8e':s.type==='slice'?'#a4e9ed':'#fff1d6')}
+  return contact;
+}
+export function strokeProgress(player){const s=player.userData.rig.swing;return s?Math.min(s.time/s.duration,1):null}

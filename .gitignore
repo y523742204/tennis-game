@@ -1,0 +1,7 @@
+node_modules/
+.deploy-local/
+*.tgz
+/*.png
+/*.log
+.DS_Store
+Thumbs.db

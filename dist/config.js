@@ -85,6 +85,7 @@ export const CONFIG={
     serveSideSpin:170, // 发球最大侧旋角速度；增大可加强横向弯曲
   },
   input:{
+    serveCancelTop:48, // 发球长按后拖入屏幕顶部取消区的高度（另加安全区），像素
     holdMs:260, // 长按触发时间
     chargeRate:.004, // 力量循环角速度，弧度/毫秒
     minimumPower:35, // 力量条最小值
@@ -158,24 +159,24 @@ export const CONFIG={
   },
   layout:{
     edge:12,top:16,bottom:34, // 桌面取景留白，像素
-    portraitTop:112,portraitRight:12,portraitBottom:72, // 竖屏为紧凑比分/底部测速留白
+    portraitTop:112,portraitRight:12,portraitBottom:30, // 竖屏顶部为比分和测速留白
     landscapeLeft:148,landscapeRight:12,landscapeTop:12,landscapeBottom:22, // 横屏为紧凑计分板留白
     minimumWidth:100,minimumHeight:130,fallbackLeft:8,fallbackTop:12, // 极小窗口保护
     mobilePowerWidth:48,desktopPowerWidth:80, // 力量条区域宽度
     serveSize:248,shotWidth:290,shotHeight:265, // 手势控件设计尺寸，修改须同步 CSS/SVG
-    gestureMobileRight:64,gestureDesktopRight:104,gestureLeft:8, // 手势边界留白
+    gestureMobileRight:8,gestureDesktopRight:8,gestureLeft:8, // 手势边界留白，不再为旁边力量条让位
     serveTop:36,shotTop:18,gestureBottom:22, // 手势纵向留白
-    gesturePowerWidth:52,gesturePowerHeight:204,gesturePowerGap:8, // 长按控件旁的力量条尺寸与间距，像素
+    gesturePowerWidth:52,gesturePowerHeight:204,gesturePowerGap:8, // 落点旁力量条尺寸与间距，像素
+    targetPowerTop:112, // 力量条避开顶部计分与测速区，像素
     floorSideMargin:.2,floorDepthMargin:.2, // 缓冲区外缘的额外取景余量
     playerHeight:2.7, // 缓冲区内跑动球员取景高度
   },
   view:{
     fieldOfView:43, // 相机垂直视角
     desktopPixelRatio:2,mobilePixelRatio:1.5, // 像素倍率上限
-    desktopShadowSize:2048,mobileShadowSize:1024, // 阴影贴图尺寸
     exposure:1.15, // 画面曝光
     mobileWidth:900,mobileHeight:500, // 判定移动端布局的尺寸阈值
-    portraitCameraY:32,portraitCameraZ:17,cameraY:20,cameraZ:27, // 相机方向
+    cameraY:20,cameraZ:27, // 所有设备统一相机方向，仅距离按屏幕比例适配
     cameraFar:220,cameraPadding:1.012, // 相机远平面、取景余量
     visibleBufferFraction:.45, // 镜头保留的缓冲区比例；越小视角越近，场地实体尺寸不变
     previewMs:70,mobilePreviewMs:120, // 轨迹预览刷新间隔

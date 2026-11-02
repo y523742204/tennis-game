@@ -3,7 +3,7 @@ import {serveVelocityError} from './accuracy.js';
 import {solveShot,speedKmh} from './shot.js';
 import {TennisAudio} from './audio.js';
 import {CONFIG as CFG} from './config.js';
-import {viewportLayout,fitCourtCamera,gesturePlacement,gesturePowerPlacement,directionShot} from './viewport.js';
+import {viewportLayout,fitCourtCamera,gesturePlacement,gesturePowerPlacement,directionShot,cancelsServe} from './viewport.js';
 import {Stamina,staminaEffects,fatigueTarget,staminaDisplay} from './stamina.js';
 import {ReturnStrategy} from './return-strategy.js';
 import {selectContact,recoveryPosition} from './tactics.js';
@@ -15,14 +15,14 @@ import * as THREE from './vendor/three.module.js';
 const arena=document.querySelector('#arena'),message=document.querySelector('#announcement');
 const scene=new THREE.Scene();scene.background=new THREE.Color(CFG.view.background);scene.fog=new THREE.Fog(CFG.view.background,27,65);
 const camera=new THREE.PerspectiveCamera(CFG.view.fieldOfView,1,.1,100);camera.position.set(0,20,27);camera.lookAt(0,0,1);
-const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,CFG.view.desktopPixelRatio));renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=CFG.view.exposure;arena.prepend(renderer.domElement);
-scene.add(new THREE.HemisphereLight(0xf5ffe2,0x34523e,2.5));const sun=new THREE.DirectionalLight(0xfff4d4,3);sun.position.set(-10,20,8);sun.castShadow=true;sun.shadow.normalBias=.025;sun.shadow.radius=4;sun.shadow.mapSize.set(2048,2048);Object.assign(sun.shadow.camera,{left:-16,right:16,top:18,bottom:-18});scene.add(sun);
-function box(w,h,d,color,x=0,y=0,z=0){const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),new THREE.MeshStandardMaterial({color,roughness:.85}));mesh.position.set(x,y,z);mesh.receiveShadow=true;scene.add(mesh);return mesh}
+const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,CFG.view.desktopPixelRatio));renderer.shadowMap.enabled=false;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=CFG.view.exposure;arena.prepend(renderer.domElement);
+scene.add(new THREE.HemisphereLight(0xf5ffe2,0x34523e,2.5));const sun=new THREE.DirectionalLight(0xfff4d4,3);sun.position.set(-10,20,8);sun.castShadow=false;sun.shadow.normalBias=.025;sun.shadow.radius=4;sun.shadow.mapSize.set(2048,2048);Object.assign(sun.shadow.camera,{left:-16,right:16,top:18,bottom:-18});scene.add(sun);
+function box(w,h,d,color,x=0,y=0,z=0){const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),(y<0?new THREE.MeshBasicMaterial({color,toneMapped:false,fog:false}):new THREE.MeshStandardMaterial({color,roughness:.85})));mesh.position.set(x,y,z);mesh.receiveShadow=false;scene.add(mesh);return mesh}
 const courtSize=courtDimensions(),court=CFG.court;
 box(courtSize.width,.3,courtSize.length,court.bufferColor,0,-.25);
 box(courtSize.width,.02,courtSize.length,court.bufferColor,0,-.08);
 const stripeDepth=court.halfLength*2/12;
-for(let i=0;i<12;i++)box(court.doublesHalfWidth*2,.02,stripeDepth,court.grassColors[i%2],0,-.08,-court.halfLength+(i+.5)*stripeDepth);
+for(let i=0;i<12;i++)box(court.doublesHalfWidth*2,.02,stripeDepth,court.grassColors[i%2],0,-.065,-court.halfLength+(i+.5)*stripeDepth);
 function line(x,z,w,d){box(w,.025,d,'#e8ebcd',x,-.045,z)}
 for(const x of [-court.doublesHalfWidth,-court.halfWidth,court.halfWidth,court.doublesHalfWidth])line(x,0,court.lineWidth,court.halfLength*2);
 for(const z of [-court.halfLength,court.halfLength]){line(0,z,court.doublesHalfWidth*2,court.lineWidth);line(0,z-Math.sign(z)*.1,court.lineWidth,.2)}
@@ -36,8 +36,7 @@ for(let i=0;i<=40;i++)box(.018,1.05,.018,'#c9d1bd',-netHalfWidth+i*netHalfWidth*
 for(let i=0;i<8;i++)box(netHalfWidth*2,.018,.018,'#a5b69c',0,i*.14,0);
 box(netHalfWidth*2,.08,.06,'#f4f0d8',0,1.1);for(const x of [-netHalfWidth,netHalfWidth])box(.12,1.4,.12,'#dde2ca',x,.6);
 const human=createPlayer(scene,CFG.view.humanColor,10.5,CFG.view.humanAccent),cpu=createPlayer(scene,CFG.view.cpuColor,-10.5,CFG.view.cpuAccent);const ball=new THREE.Mesh(new THREE.SphereGeometry(CFG.physics.ballRadius,16,16),new THREE.MeshStandardMaterial({color:'#e2f76a',emissive:'#687a16',emissiveIntensity:.3}));ball.castShadow=true;scene.add(ball);for(const axis of [0,Math.PI/2]){const seam=new THREE.Mesh(new THREE.TorusGeometry(CFG.physics.ballRadius+.001,.006,5,36),new THREE.MeshStandardMaterial({color:'#fbffe5',roughness:.8}));seam.rotation.x=axis;ball.add(seam);}
-const textureCanvas=document.createElement('canvas');textureCanvas.width=textureCanvas.height=256;const ctx=textureCanvas.getContext('2d');ctx.fillStyle='#eee';ctx.fillRect(0,0,256,256);for(let i=0;i<8000;i++){const shade=170+Math.random()*80;ctx.fillStyle='rgb('+shade+','+shade+','+shade+')';ctx.fillRect(Math.random()*256,Math.random()*256,1,3)}const grassTexture=new THREE.CanvasTexture(textureCanvas);grassTexture.wrapS=grassTexture.wrapT=THREE.RepeatWrapping;grassTexture.repeat.set(5,2);grassTexture.anisotropy=renderer.capabilities.getMaxAnisotropy();scene.traverse(o=>{if(o.isMesh&&o.position.y===-.08){o.material.map=grassTexture;o.material.bumpMap=grassTexture;o.material.bumpScale=.03}});
-const shadow=new THREE.Mesh(new THREE.CircleGeometry(.26,24),new THREE.MeshBasicMaterial({color:'#112c1a',transparent:true,opacity:.25,depthWrite:false}));shadow.rotation.x=-Math.PI/2;scene.add(shadow);
+const shadow=new THREE.Mesh(new THREE.CircleGeometry(.26,24),new THREE.MeshBasicMaterial({color:'#112c1a',transparent:true,opacity:.25,depthWrite:false}));shadow.rotation.x=-Math.PI/2;shadow.visible=false;
 const world=new C.World({gravity:new C.Vec3(0,-CFG.physics.gravity,0)});world.solver.iterations=CFG.physics.solverIterations;
 const felt=new C.Material(),grass=new C.Material(),netMat=new C.Material();
 world.addContactMaterial(new C.ContactMaterial(felt,grass,{friction:CFG.physics.grassFriction,restitution:CFG.physics.grassRestitution}));world.addContactMaterial(new C.ContactMaterial(felt,netMat,{friction:CFG.physics.netFriction,restitution:CFG.physics.netRestitution}));
@@ -64,16 +63,19 @@ function resizeCourt(){
  previousViewport={width,height};
  renderer.setPixelRatio(Math.min(devicePixelRatio,screenLayout.mobile?CFG.view.mobilePixelRatio:CFG.view.desktopPixelRatio));renderer.setSize(width,height);fitCourtCamera(camera,screenLayout,ends[0]);
  const viewDistance=camera.position.length();scene.fog.near=Math.max(27,viewDistance-8);scene.fog.far=viewDistance+80;
- const shadowSize=screenLayout.mobile?CFG.view.mobileShadowSize:CFG.view.desktopShadowSize;
- if(sun.shadow.mapSize.x!==shadowSize){sun.shadow.mapSize.set(shadowSize,shadowSize);if(sun.shadow.map){sun.shadow.map.dispose();sun.shadow.map=null}renderer.shadowMap.needsUpdate=true}
  if(hold?.ready)placeCurrentGesture();dirty=true;
+}
+function placeTargetPower(){
+ if(!screenLayout||!hold?.ready)return;
+ const projected=new THREE.Vector3(aim.x,0,aim.z).project(camera),rect=canvas.getBoundingClientRect();
+ const power=gesturePowerPlacement(screenLayout,{x:(projected.x+1)*rect.width/2,y:(1-projected.y)*rect.height/2},hold.gesture),panel=$('powerPanel');
+ panel.style.left=(rect.left+power.left)+'px';panel.style.top=(rect.top+power.top)+'px';panel.style.width=CFG.layout.gesturePowerWidth+'px';panel.style.height=CFG.layout.gesturePowerHeight+'px';panel.style.transform='scale('+power.scale+')';
 }
 function placeCurrentGesture(){
  if(!hold||!screenLayout)return;
  const kind=hold.mode==='serve'?'serve':'rally',p=gesturePlacement(screenLayout,hold.x,hold.y,kind),element=kind==='serve'?$('serveDial'):wheel;
  element.style.left=p.left+'px';element.style.top=p.top+'px';element.style.transform='scale('+p.scale+')';element.style.transformOrigin='top left';
- const power=gesturePowerPlacement(screenLayout,p),panel=$('powerPanel');
- panel.style.left=power.left+'px';panel.style.top=power.top+'px';panel.style.width=CFG.layout.gesturePowerWidth+'px';panel.style.height=CFG.layout.gesturePowerHeight+'px';panel.style.transform='scale('+power.scale+')';
+ hold.gesture=p;placeTargetPower();
  if(kind==='serve')hold.radius=82*p.scale;else hold.origin={x:p.left+145*p.scale,y:p.top+140*p.scale};
 }
 
@@ -294,7 +296,7 @@ function step(dt){
  }
  if(elapsed>CFG.tactics.rallyTimeout||Math.abs(physicalBall.position.x)>courtSize.halfWidth+CFG.tactics.escapeMargin||Math.abs(physicalBall.position.z)>courtSize.halfLength+CFG.tactics.escapeMargin){if(isServe)serviceFault('发球未能有效过网');else finishPoint(bounces?lastHitter:1-lastHitter,bounces?'未能回球':'击球出界')}
 }
-function cancelHold(){const previous=hold;hold=null;if(previous){clearTimeout(previous.timer);if(previous.surface.hasPointerCapture(previous.id))previous.surface.releasePointerCapture(previous.id)}wheel.hidden=true;$('serveDial').hidden=true;$('powerPanel').hidden=true;}
+function cancelHold(){const previous=hold;hold=null;if(previous){clearTimeout(previous.timer);if(previous.surface.hasPointerCapture(previous.id))previous.surface.releasePointerCapture(previous.id)}wheel.hidden=true;$('serveDial').hidden=true;$('powerPanel').hidden=true;$('serveCancel').hidden=true;}
 function updateServeDial(){
  const x=serveSpin.x,y=serveSpin.y;$('serveKnob').style.transform='translate('+x*82+'px,'+(-y*82)+'px)';
  $('serveVector').setAttribute('x2',124+x*82);$('serveVector').setAttribute('y2',124-y*82);
@@ -304,17 +306,17 @@ function updateServeDial(){
 function showWheel(){
  if(!hold||!ready()){cancelHold();return}hold.ready=true;hold.chargeStart=performance.now();hold.mode=servingInput()?'serve':'rally';gauge=0;
  if(servingInput()){
-  placeCurrentGesture();$('serveDial').hidden=false;
-  hold.spinOrigin={x:hold.x,y:hold.y};serveSpin={x:0,y:0};updateServeDial();say('拖动圆心：平击 / 上旋 / 左右侧旋；斜向可混合旋转');
+  placeCurrentGesture();$('serveDial').hidden=false;$('serveCancel').hidden=false;
+  hold.spinOrigin={x:hold.x,y:hold.y};serveSpin={x:0,y:0};updateServeDial();say('拖动选择旋转 · 松手发球 · 拖至屏幕顶部取消并重选落点');
  }else{
-  placeCurrentGesture();wheel.hidden=false;hold.pressOrigin={x:hold.x,y:hold.y};updateNodes();say('↑ 上旋 / ↙ 平击 / ↘ 切削 · 旁边力量条的金色区域松手 = PERFECT');
+  placeCurrentGesture();wheel.hidden=false;hold.pressOrigin={x:hold.x,y:hold.y};updateNodes();say('↑ 上旋 / ↙ 平击 / ↘ 切削 · 落点旁力量条的金色区域松手 = PERFECT');
  }
  $('powerPanel').hidden=false;dirty=true;
 }
 function updateNodes(){wheel.querySelectorAll('[data-shot]').forEach(node=>node.classList.toggle('selected',node.dataset.shot===selected))}
 function beginHold(e){if(e.isPrimary===false)return;if(!hold){retiredPointerId=null;ignoreNextClick=false}if(e.button!==0||!ready()||hold)return;if(e.currentTarget===canvas)aimAt(e);e.preventDefault();const surface=e.currentTarget;surface.setPointerCapture(e.pointerId);hold={surface,id:e.pointerId,pointerType:e.pointerType,x:e.clientX,y:e.clientY,ready:false,timer:setTimeout(showWheel,CFG.input.holdMs)};}
 function moveHold(e){
- if(!hold||e.pointerId!==hold.id)return;e.preventDefault();if(!hold.ready){if(hold.pointerType==='touch'){hold.x=e.clientX;hold.y=e.clientY;aimAt(e,true)}return}if(hold.mode==='serve'){serveSpin=servePad((e.clientX-hold.spinOrigin.x)/hold.radius,(hold.spinOrigin.y-e.clientY)/hold.radius);updateServeDial();dirty=true;return}const origin=screenLayout?.mobile||hold.pointerType==='touch'?hold.pressOrigin:hold.origin;
+ if(!hold||e.pointerId!==hold.id)return;e.preventDefault();if(!hold.ready){if(hold.pointerType==='touch'){hold.x=e.clientX;hold.y=e.clientY;aimAt(e,true)}return}if(hold.mode==='serve'){if(cancelsServe(screenLayout,e.clientY)){retiredPointerId=hold.id;ignoreNextClick=true;cancelHold();serveSpin={x:0,y:0};gauge=.5;dirty=true;say('已取消发球 · 重新选择落点，再长按发球');return}serveSpin=servePad((e.clientX-hold.spinOrigin.x)/hold.radius,(hold.spinOrigin.y-e.clientY)/hold.radius);updateServeDial();dirty=true;return}const origin=screenLayout?.mobile||hold.pointerType==='touch'?hold.pressOrigin:hold.origin;
  const next=directionShot(e.clientX-origin.x,e.clientY-origin.y);if(next&&next!==selected){selected=next;dirty=true;updateNodes()}
 }
 function finishHold(e){
@@ -352,7 +354,7 @@ function updateVisuals(now,dt){
   aimLine.geometry.dispose();aimLine.geometry=new THREE.BufferGeometry().setFromPoints(shot.points);aimLine.computeLineDistances();marker.visible=true;marker.position.set(shot.landing?.x??aim.x,.015,shot.landing?.z??aim.z);
  }
  if(!['choose','flight'].includes(phase))marker.visible=false;
- if(hold?.ready&&!paused){gauge=(1-Math.cos((now-hold.chargeStart)*CFG.input.chargeRate))/2;$('needle').style.bottom=(gauge*100)+'%';$('powerValue').textContent=Math.round(CFG.input.minimumPower+gauge*CFG.input.powerRange)+'%';$('timingText').textContent=Math.abs(gauge-CFG.input.perfectCenter)<=CFG.input.perfectHalfWidth?'✦ PERFECT':'金色区域松手'}
+ if(hold?.ready&&!paused){placeTargetPower();gauge=(1-Math.cos((now-hold.chargeStart)*CFG.input.chargeRate))/2;$('needle').style.bottom=(gauge*100)+'%';$('powerValue').textContent=Math.round(CFG.input.minimumPower+gauge*CFG.input.powerRange)+'%';$('timingText').textContent=Math.abs(gauge-CFG.input.perfectCenter)<=CFG.input.perfectHalfWidth?'✦ PERFECT':'金色区域松手'}
  ball.position.copy(physicalBall.position);ball.quaternion.copy(physicalBall.quaternion);
  if(isServe&&['choose','ai'].includes(phase))ball.position.y=1.3;
  if(pendingStroke?.serving){const u=strokeProgress(players[pendingStroke.who])||0;ball.position.y=1.3+(CFG.shot.serveContactHeight-1.3)*Math.sin(Math.min(u/CFG.animation.serveContact,1)*Math.PI/2);}

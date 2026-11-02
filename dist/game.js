@@ -82,8 +82,8 @@ function updatePlayerEnergy(dt){
   const visible=started&&$('startMenu').hidden&&$('sideMenu').hidden&&Math.abs(feetPosition.x)<1&&Math.abs(feetPosition.y)<1&&feetPosition.z>-1&&feetPosition.z<1;
   view.root.hidden=!visible;
   if(visible){view.root.style.left=((feetPosition.x*.5+.5)*arena.clientWidth)+'px';view.root.style.top=((-feetPosition.y*.5+.5)*arena.clientHeight+8)+'px'}
-  view.fill.style.transform='scaleX('+displayedStamina[i]/100+')';view.trail.style.transform='scaleX('+Math.max(displayedStamina[i],trailingStamina[i])/100+')';
-  view.meter.style.background=`linear-gradient(to right,#173a2bda ${energy.caps[i]}%,#080f0c ${energy.caps[i]}%)`;
+  const cap=energy.caps[i],fill=Math.min(1,displayedStamina[i]/cap),trail=Math.min(1,Math.max(displayedStamina[i],trailingStamina[i])/cap);
+  view.fill.style.transform='scaleX('+fill+')';view.trail.style.transform='scaleX('+trail+')';
   view.root.classList.toggle('low',target<25);view.root.classList.toggle('tired',target>=25&&target<45);
   view.root.classList.toggle('draining',falling&&displayedStamina[i]-target>.3);
   view.label.textContent=Math.round(displayedStamina[i])+'/'+Math.round(energy.caps[i]);view.meter.setAttribute('aria-valuenow',String(Math.round(target)));
@@ -179,7 +179,9 @@ function prepareServe(){
  say(server===0?(serveAttempt===1?(match.serviceSide===0?'一区':'二区')+'发球 · 长按，瞄准高亮斜对角发球区':'二发机会 · 再次失误将失分'):'电脑'+(serveAttempt===2?'二发':'发球')+' · '+(match.serviceSide===0?'一区':'二区'));ui();
 }
 function finishPoint(who,reason){
- clearReturn();cancelHold();const result=match.award(who);energy.finishPoint(result.game);if(result.changeEnds){ends=ends.map(v=>-v);viewEnd()}
+ clearReturn();cancelHold();const result=match.award(who);energy.finishPoint(result.game);
+ displayedStamina=[...stamina];trailingStamina=[...stamina];updatePlayerEnergy(0);
+ if(result.changeEnds){ends=ends.map(v=>-v);viewEnd()}
  phase=match.winner===null?'point':'end';plan=null;recoveryTargets=[null,null];contactGuide.visible=false;acc=0;serveAttempt=1;serviceBox.visible=false;marker.visible=false;aimLine.visible=false;
  say((who===0?'你得分':'电脑得分')+' · '+reason+(result.set?' · 本盘结束':result.game?' · 本局结束，交换发球权'+(result.changeEnds?'并交换场地':''):''));ui();
 }

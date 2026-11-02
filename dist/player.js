@@ -38,25 +38,50 @@ export function createPlayer(scene,color,z,accent) {
   const stringMat=new THREE.LineBasicMaterial({color:'#e6f0d7',transparent:true,opacity:.8});
   for(let i=-3;i<=3;i++){const x=i*.055,hy=.28*Math.sqrt(1-x*x/(.22*.22));const vertical=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x,-hy,0),new THREE.Vector3(x,hy,0)]),stringMat);strings.add(vertical);const y=i*.065,hx=.22*Math.sqrt(1-y*y/(.28*.28));strings.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-hx,y,0),new THREE.Vector3(hx,y,0)]),stringMat));}
   const trail=new THREE.Line(new THREE.BufferGeometry(),new THREE.LineBasicMaterial({color:'#dfef9a',transparent:true,opacity:.65}));trail.frustumCulled=false;scene.add(trail);
-  root.userData.rig={body,chest,head,leftLeg,rightLeg,leftArm,rightArm,racket,strings,trail,trailPoints:[],swing:null,clock:0,last:root.position.clone()};
+  root.userData.rig={body,hips,chest,head,leftLeg,rightLeg,leftArm,rightArm,racket,strings,trail,trailPoints:[],swing:null,clock:0,gait:0,velocity:new THREE.Vector3(),last:root.position.clone()};
   return root;
 }
 const READY={right:[1.05,-.15,-.25],left:[.8,.2,.35],elbowR:.65,elbowL:.55,wrist:[-.3,0,.12],yaw:0,pitch:.04,bend:.1};
+function blendPose(a,b,t){
+  const result={};
+  for(const key of new Set([...Object.keys(a),...Object.keys(b)])){
+    const av=a[key]??0,bv=b[key]??0;
+    result[key]=Array.isArray(av)?av.map((v,i)=>mix(v,bv[i],t)):mix(av,bv,t);
+  }
+  return result;
+}
 function pose(type,backhand,serve,u,pad={x:0,y:0}){
   const side=backhand?-1:1,wind=1-smooth(Math.min(u/.42,1)),follow=smooth(Math.max(0,(u-.42)/.58));
   if(serve){
     const reach=Math.sin(Math.min(u/.72,1)*Math.PI/2),recover=smooth(Math.max(0,(u-.72)/.28));
     return {right:[mix(.5,2.6,reach)-recover*1.8, mix(-.65,.15,reach),-.2-recover*.4],left:[3.0*(1-recover),0,.2],elbowR:mix(1.8,.08,reach)+recover*.6,elbowL:.12+recover*.5,wrist:[-.15-pad.y*.35, .2+pad.x*reach*.85,pad.x*.2],yaw:-.4*wind+.45*follow+pad.x*.18,pitch:-.2*wind+.23*follow,bend:.4*wind};
   }
-  const lift=type==='top'?1.1:type==='slice'?-.6:.35;
-  return {right:[(type==='slice'?2:1.05)*wind+(1.3+lift*follow)*(1-wind),side*(-1.1*wind+1.0*follow),backhand?-.95:-.55],left:backhand?[1.3,.4,.2]:[.6,-.25,.6],elbowR:.35+.7*wind,elbowL:backhand?.5:.8,wrist:[type==='slice'?.6:type==='top'?-.65:0,0,side*(.25-.6*follow)],yaw:side*(-.65*wind+.8*follow),pitch:type==='slice'?-.05:.1+follow*.12,bend:.3*(1-follow)};
+  // Coil, drive, contact, finish, recover. Hips lead the shoulders;
+  // the free arm opens out for balance on a one-handed backhand.
+  const slice=type==='slice',top=type==='top';
+  const coil={...READY,right:backhand?[1.25,.85,-1.05]:[slice?1.85:.75,-1.0,-.65],left:backhand?[1.1,-.35,.1]:[1.25,.35,.55],elbowR:1.15,elbowL:.7,wrist:[slice?.5:-.45,-.2,side*.3],yaw:-side*.85,hipYaw:-side*.42,pitch:.12,bend:.34,weight:-side*.1};
+  const drive={...coil,right:backhand?[1.15,.35,-.85]:[slice?1.65:.9,-.65,-.7],elbowR:.8,hipYaw:side*.15,yaw:-side*.45,bend:.27,weight:side*.025};
+  const contactPose={...READY,right:backhand?[1.45,-.65,-.6]:[1.4,.35,-.65],left:backhand?[.65,.5,.9]:[.8,-.4,.65],elbowR:.18,elbowL:.7,wrist:[slice?.45:top?-.4:-.12,0,-side*.1],yaw:side*.15,hipYaw:side*.35,pitch:.1,bend:.16,weight:side*.1};
+  const finish={...contactPose,right:backhand?[slice?1.2:2.05,-1.05,-.85]:[slice?1.05:top?2.35:1.95,1.05,-.3],left:backhand?[.45,.65,1.05]:[.6,-.3,.55],elbowR:backhand?.35:.85,wrist:[slice?.55:top?-.7:-.25,.15,-side*.4],yaw:side*.85,hipYaw:side*.55,bend:.09,weight:side*.07};
+  const frames=[[0,READY],[.22,coil],[.32,drive],[.42,contactPose],[.64,finish],[.76,finish],[1,READY]];
+  for(let i=1;i<frames.length;i++)if(u<=frames[i][0]){
+    const [start,a]=frames[i-1],[end,b]=frames[i];
+    return blendPose(a,b,smooth(THREE.MathUtils.clamp((u-start)/(end-start),0,1)));
+  }
+  return READY;
 }
 export function beginStroke(player,{type='flat',backhand=false,serve=false,pad={x:0,y:0}}={}){
   const rig=player.userData.rig;rig.swing={type,backhand,serve,pad,time:0,duration:serve?1.35:1.05,contact:serve?.72:.42,hit:false};rig.trailPoints=[];
 }
 export function updatePlayer(player,dt,{end=1,moving=false,serveReady=false,ready=false,paused=false}={}){
+  if(paused){player.userData.rig.last.copy(player.position);return false}
   const r=player.userData.rig;r.clock+=paused?0:dt;
-  const distance=player.position.distanceTo(r.last);r.last.copy(player.position);const running=moving&&distance>.0001;
+  const displacement=player.position.clone().sub(r.last);r.last.copy(player.position);
+  const targetVelocity=moving&&dt>0&&displacement.length()<1?displacement.divideScalar(dt):new THREE.Vector3();
+  r.velocity.lerp(targetVelocity,1-Math.exp(-dt*10));
+  const speed=r.velocity.length(),stride=THREE.MathUtils.clamp(speed/5,0,1),running=stride>.01;
+  const lateral=THREE.MathUtils.clamp(r.velocity.x*end/5,-1,1),forward=THREE.MathUtils.clamp(-r.velocity.z*end/5,-1,1);
+  r.gait+=dt*(7+stride*10)*Math.min(1,stride*4);
   player.rotation.y=end===1?0:Math.PI;
   let p={...READY},contact=false,s=r.swing;
   if(s&&!paused){s.time+=dt;const u=Math.min(s.time/s.duration,1);p=pose(s.type,s.backhand,s.serve,u,s.pad);
@@ -64,15 +89,23 @@ export function updatePlayer(player,dt,{end=1,moving=false,serveReady=false,read
     if(u>=1)r.swing=null;
   }else if(s){p=pose(s.type,s.backhand,s.serve,Math.min(s.time/s.duration,1),s.pad)}
   else if(serveReady){p={...READY,right:[.3,-.5,-.45],left:[1.15,0,.15],elbowR:1.4,elbowL:.1,yaw:-.25,bend:.16}}
-  const gait=running?Math.sin(r.clock*17):0,hop=running?Math.abs(Math.sin(r.clock*17))*.075:Math.sin(r.clock*2)*.012;
+  const gait=Math.sin(r.gait)*stride,hop=(1-Math.cos(r.gait*2))*.03*stride+Math.sin(r.clock*2)*.012*(1-stride);
   if(running&&!s){p={...p,right:[1.0+gait*.5,-.15,-.3],left:[.8-gait*.5,.15,.3],pitch:.16,yaw:gait*.08}}
   const damp=1-Math.exp(-dt*18),rot=(object,values)=>{for(let i=0;i<3;i++){const axis=['x','y','z'][i];object.rotation[axis]=mix(object.rotation[axis],values[i],damp)}};
-  r.body.position.y=hop-(p.bend||0)*.14+(s?.serve?Math.sin(Math.PI*THREE.MathUtils.clamp((s.time/s.duration-.35)/.55,0,1))*.16:0);r.body.rotation.z=running?gait*.035:0;
+  r.body.position.y=mix(r.body.position.y,hop-(p.bend||0)*.14+(s?.serve?Math.sin(Math.PI*THREE.MathUtils.clamp((s.time/s.duration-.35)/.55,0,1))*.16:0),damp);
+  r.body.position.x=mix(r.body.position.x,(p.weight||0)+gait*.018,damp);
+  rot(r.body,[forward*.07,0,-lateral*.1+gait*.025]);
+  rot(r.hips,[0,(p.hipYaw||0)-gait*.06,0]);
   rot(r.chest,[p.pitch||0,p.yaw||0,0]);r.head.rotation.y=mix(r.head.rotation.y,-(p.yaw||0)*.5,damp);
   rot(r.rightArm.shoulder,p.right);rot(r.leftArm.shoulder,p.left);rot(r.rightArm.hand,p.wrist||[0,0,0]);
   r.rightArm.elbow.rotation.x=mix(r.rightArm.elbow.rotation.x,p.elbowR,damp);r.leftArm.elbow.rotation.x=mix(r.leftArm.elbow.rotation.x,p.elbowL,damp);
-  for(const [leg,sign] of [[r.leftLeg,1],[r.rightLeg,-1]]){leg.hip.rotation.x=gait*.65*sign-(p.bend||0)*.5;leg.hip.rotation.z=sign*.09;leg.knee.rotation.x=Math.max(0,-gait*sign)*.65+(p.bend||0);}
-  r.trail.visible=!!s&&s.time/s.duration>.23;
+  for(const [leg,sign] of [[r.leftLeg,1],[r.rightLeg,-1]]){
+    const step=gait*sign,bend=p.bend||0;
+    rot(leg.hip,[step*(.18+Math.abs(forward)*.5)-bend*.5,(p.hipYaw||0)*.5,sign*.09+step*lateral*.45]);
+    rot(leg.knee,[Math.max(0,-step)*.85+bend,0,0]);
+  }
+  const progress=s?s.time/s.duration:0;
+  r.trail.visible=!!s&&progress>(s.serve?.5:.3)&&progress<(s.serve?.88:.74);
   if(r.trail.visible&&!paused){player.updateMatrixWorld(true);const point=new THREE.Vector3();r.strings.getWorldPosition(point);r.trailPoints.push(point);if(r.trailPoints.length>13)r.trailPoints.shift();r.trail.geometry.dispose();r.trail.geometry=new THREE.BufferGeometry().setFromPoints(r.trailPoints);r.trail.material.color.set(s.type==='top'?'#e5ed8e':s.type==='slice'?'#a4e9ed':'#fff1d6')}
   return contact;
 }

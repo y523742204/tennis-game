@@ -48,3 +48,19 @@ test('own launch opens the next selection immediately with no stale lock',()=>{
  assert.equal(ctx.phase,'flight');assert.equal(ctx.returnStrategy.active,true);assert.equal(ctx.returnStrategy.locked,null);
  assert.equal(ctx.hold,null);assert.equal(ctx.selected,'flat');
 });
+test('first and second serves spend no shot stamina, rallies still do',()=>{
+ for(const serving of [true,false])for(const attempt of [1,2]){
+  const ctx=fixture();ctx.isServe=serving;ctx.serveAttempt=attempt;let spent=0;
+  ctx.energy.spend=()=>spent++;ctx.cost=()=>10;
+  vm.runInContext("launchStroke(0,'flat',65)",ctx);
+  assert.equal(spent,serving?0:1);
+ }
+});
+test('air contact executes special stroke while preserving the selected aim and power',()=>{
+ for(const kind of ['volley','smash']){
+  const ctx=fixture();ctx.plan.kind=kind;let played;
+  ctx.trajectory=(who,type,target,power)=>{played={type,power};return {v:{x:0,y:0,z:30},spin:{x:0,y:0,z:0}}};
+  vm.runInContext('step(1/240)',ctx);
+  assert.equal(played.type,kind);assert.equal(played.power,65);assert.equal(ctx.lastHitter,1);
+ }
+});

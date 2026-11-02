@@ -133,7 +133,7 @@ function showShotSpeed(who,type,serving,perfect,velocity){
  const kmh=Math.round(speedKmh(velocity));lastShotSpeed={who,kmh,perfect};
  const panel=$('shotSpeed');panel.hidden=false;panel.classList.toggle('perfect',perfect);
  $('shotSpeedValue').textContent=kmh;
- $('shotSpeedLabel').textContent=(who===0?'你':'电脑')+' · '+(serving?'发球':{flat:'平击',top:'上旋',slice:'切削'}[type]);
+ $('shotSpeedLabel').textContent=(who===0?'你':'电脑')+' · '+(serving?'发球':{flat:'平击',top:'上旋',slice:'切削',volley:'网前截击',smash:'高压扣杀'}[type]);
  $('shotSpeedQuality').textContent=perfect?'PERFECT · 暴力击球':'出拍球速';
  panel.setAttribute('aria-label',(who===0?'你':'电脑')+(perfect?' Perfect 暴力击球':'击球')+'，出拍球速 '+kmh+' 千米每小时');
 }
@@ -176,9 +176,9 @@ function predict(){
  for(let i=1;i<CFG.tactics.predictionSteps;i++){
   predictedTime=i*PHYSICS_STEP;forces(b);w.step(PHYSICS_STEP);if(bounce>=2)break;
   if(landing){const legal=isServe?validServiceLanding(landing.x,landing.z,ends[lastHitter],match.serviceSide):Math.abs(landing.x)<=CFG.court.halfWidth+CFG.physics.ballRadius&&Math.abs(landing.z)<=CFG.court.halfLength+CFG.physics.ballRadius&&landing.z*ends[receiver]>0;if(!legal)return null;}
-  if(bounce===1)samples.push({x:b.position.x,y:b.position.y,z:b.position.z,vx:b.velocity.x,vy:b.velocity.y,vz:b.velocity.z,time:predictedTime,bounces:bounce,landing});
+  if(bounce===1||(!isServe&&bounce===0))samples.push({x:b.position.x,y:b.position.y,z:b.position.z,vx:b.velocity.x,vy:b.velocity.y,vz:b.velocity.z,time:predictedTime,bounces:bounce,landing});
  }
- const contact=selectContact(samples,{position:players[receiver].position,end:ends[receiver],speed:runSpeed(receiver),stamina:stamina[receiver]});
+ const contact=selectContact(samples,{position:players[receiver].position,end:ends[receiver],speed:runSpeed(receiver),stamina:stamina[receiver],allowAir:!isServe});
  return contact?{...contact,receiver}:null;
 }
 function movePlayerTo(who,target,dt,speedFactor=1){
@@ -249,7 +249,7 @@ function launchStroke(who,type,power,perfect=false,pad=null,returnChoice=null){
  const shot=trajectory(who,type,target,power,perfect,pad);physicalBall.velocity.copy(serveVelocityError(shot.v,{serving,attempt:serveAttempt,type,pad,power,perfect}));physicalBall.angularVelocity.set(shot.spin.x,shot.spin.y,shot.spin.z);physicalBall.force.setZero();physicalBall.torque.setZero();
  showShotSpeed(who,type,serving,perfect,physicalBall.velocity);
  sounds.hit({type,serving,perfect,speed:speedKmh(physicalBall.velocity)});
- energy.spend(who,cost(power,type)*(perfect?CFG.stamina.perfectCostMultiplier:1));lastHitter=who;bounces=0;decision=null;netTouched=false;elapsed=0;acc=0;phase='flight';plan=predict();
+ if(!serving)energy.spend(who,cost(power,type)*(perfect?CFG.stamina.perfectCostMultiplier:1));lastHitter=who;bounces=0;decision=null;netTouched=false;elapsed=0;acc=0;phase='flight';plan=predict();
  recoveryTargets[1-who]=null;recoveryTargets[who]=recoveryPosition({end:ends[who],opponentContact:plan?.ball||shot.landing||target,strikePosition:players[who].position});recoveryDelay[who]=CFG.movement.recoveryDelay;updateContactGuide();
  if(plan){
   rallyWindup={receiver:plan.receiver,started:false,choice:plan.receiver===1?{type:['top','flat','slice'][Math.floor(Math.random()*3)],power:CFG.ai.returnPowerMin+Math.random()*CFG.ai.returnPowerRange,perfect:false}:null};
@@ -263,7 +263,7 @@ function launchStroke(who,type,power,perfect=false,pad=null,returnChoice=null){
  }
  dirty=true;
  aimLine.visible=false;marker.visible=!!plan?.landing;if(marker.visible)marker.position.set(plan.landing.x,.015,plan.landing.z);
- say(perfect?`PERFECT 暴力击球 ✦ 球速 +${Math.round((CFG.shot.perfectSpeed-1)*100)}% · 击球体力消耗 −${Math.round((1-CFG.stamina.perfectCostMultiplier)*100)}%`:who===0?'已出球 · 现在即可长按预选下一拍，松手锁定':returnStrategy.locked?'对手已出球 · 已保留锁定策略，到点自动击球':'对手已出球 · 长按选择仍有效，到点自动击球');
+ say(type==='smash'?'高压扣杀！抓住对手高球机会':type==='volley'?'网前截击！提前拦截软球':perfect?`PERFECT 暴力击球 ✦ 球速 +${Math.round((CFG.shot.perfectSpeed-1)*100)}% · 击球体力消耗 −${Math.round((1-CFG.stamina.perfectCostMultiplier)*100)}%`:who===0?'已出球 · 现在即可长按预选下一拍，松手锁定':returnStrategy.locked?'对手已出球 · 已保留锁定策略，到点自动击球':'对手已出球 · 长按选择仍有效，到点自动击球');
  if(perfect){ball.material.emissive.set('#ffc547');ball.material.emissiveIntensity=1;setTimeout(()=>{ball.material.emissive.set('#687a16');ball.material.emissiveIntensity=.3},1500)}ui();
 }
 function step(dt){
@@ -276,13 +276,13 @@ function step(dt){
   // Prepare the swing before the deadline while ball physics and running continue.
   if(rallyWindup&&!rallyWindup.started&&plan.time-elapsed<=CFG.animation.strokeDuration*CFG.animation.contact*flightTimeScale(flightIsServe)){
    const choice=plan.receiver===0?returnStrategy.current(currentReturnChoice()):rallyWindup.choice;
-   beginStroke(players[plan.receiver],{type:choice?.type||'flat',backhand:plan.backhand,serve:false});rallyWindup.started=true;
+   beginStroke(players[plan.receiver],{type:plan.kind||choice?.type||'flat',backhand:plan.backhand,serve:false});rallyWindup.started=true;
   }
   if(elapsed>=plan.time){
    const receiver=plan.receiver,p=players[receiver];
    if(Math.hypot(p.position.x-plan.x,p.position.z-plan.z)<CFG.shot.contactTolerance){
     const choice=receiver===0?returnStrategy.resolve(currentReturnChoice()):rallyWindup?.choice||{type:'flat',power:CFG.shot.neutralPower,perfect:false};
-    const backhand=plan.backhand;marker.visible=false;contactGuide.visible=false;turn++;
+    choice.type=plan.kind||choice.type;const backhand=plan.backhand;marker.visible=false;contactGuide.visible=false;turn++;
     if(receiver===0){if(hold)retiredPointerId=hold.id;cancelHold()}
     if(!players[receiver].userData.rig.swing)beginStroke(players[receiver],{type:choice.type,backhand,serve:false});
     const swing=players[receiver].userData.rig.swing;swing.type=choice.type;swing.backhand=backhand;swing.time=swing.duration*swing.contact;swing.hit=true;
@@ -322,7 +322,7 @@ function finishHold(e){
  if(e.pointerId!==hold.id)return;const didHold=hold.ready,isReturn=choosingReturn(),choice=currentReturnChoice();
  if(didHold)gauge=(1-Math.cos((performance.now()-hold.chargeStart)*CFG.input.chargeRate))/2;
  cancelHold();if(!didHold){say(`请长按至少 ${CFG.input.holdMs/1000} 秒，拖动后松手锁定`);return}
- if(isReturn){if(returnStrategy.lock(choice)){dirty=true;say('策略已锁定 · 到达腰部击球点自动执行');ui()}return}
+ if(isReturn){if(returnStrategy.lock(choice)){dirty=true;say('策略已锁定 · 到达击球点自动执行');ui()}return}
  if(ready())strike(0,selected,Math.round(CFG.input.minimumPower+gauge*CFG.input.powerRange),Math.abs(gauge-CFG.input.perfectCenter)<=CFG.input.perfectHalfWidth);
 }
 for(const surface of [canvas]){surface.addEventListener('pointerdown',beginHold);surface.addEventListener('pointermove',moveHold);surface.addEventListener('pointerup',finishHold);surface.addEventListener('pointercancel',e=>{if(hold?.id===e.pointerId)cancelHold()});surface.addEventListener('lostpointercapture',()=>{if(hold?.surface===surface)cancelHold()});surface.addEventListener('contextmenu',e=>e.preventDefault())}
@@ -333,7 +333,7 @@ function aimAt(e,whilePress=false){if(!ready()||(hold&&!whilePress))return;const
 }
 canvas.addEventListener('pointermove',e=>aimAt(e));
 function updateVisuals(now,dt){
- if(incomingReturn()&&rallyWindup?.started){const swing=human.userData.rig.swing,choice=returnStrategy.current(currentReturnChoice(now));if(swing&&choice)swing.type=choice.type}
+ if(incomingReturn()&&rallyWindup?.started){const swing=human.userData.rig.swing,choice=returnStrategy.current(currentReturnChoice(now));if(swing&&choice)swing.type=plan.kind||choice.type}
  const animationPaused=paused||!$('startMenu').hidden||!$('sideMenu').hidden;
  for(let i=0;i<2;i++){
   const contact=updatePlayer(players[i],animationPaused?0:dt,{end:ends[i],moving:!!recoveryTargets[i]||(phase==='flight'&&plan?.receiver===i),serveReady:isServe&&match.server===i&&['choose','ai'].includes(phase),ready:phase==='choose',paused:animationPaused});
@@ -348,7 +348,7 @@ function updateVisuals(now,dt){
  aimLine.visible=(servingInput()||returnPreview)&&!animationPaused;
  if(aimLine.visible&&dirty&&now-lastPreviewTime>(screenLayout?.mobile?CFG.view.mobilePreviewMs:CFG.view.previewMs)){
   dirty=false;lastPreviewTime=now;
-  const shot=trajectory(0,previewChoice?.type||selected,previewChoice?.target||aim,previewChoice?.power||(hold?.ready?Math.round(CFG.input.minimumPower+gauge*CFG.input.powerRange):CFG.shot.neutralPower),previewChoice?previewChoice.perfect:!!hold?.ready&&Math.abs(gauge-CFG.input.perfectCenter)<=CFG.input.perfectHalfWidth,servingInput()?serveSpin:null,returnPreview?plan.ball:null);
+  const shot=trajectory(0,(returnPreview&&plan.kind)||previewChoice?.type||selected,previewChoice?.target||aim,previewChoice?.power||(hold?.ready?Math.round(CFG.input.minimumPower+gauge*CFG.input.powerRange):CFG.shot.neutralPower),previewChoice?previewChoice.perfect:!!hold?.ready&&Math.abs(gauge-CFG.input.perfectCenter)<=CFG.input.perfectHalfWidth,servingInput()?serveSpin:null,returnPreview?plan.ball:null);
   aimLine.geometry.dispose();aimLine.geometry=new THREE.BufferGeometry().setFromPoints(shot.points);aimLine.computeLineDistances();marker.visible=true;marker.position.set(shot.landing?.x??aim.x,.015,shot.landing?.z??aim.z);
  }
  if(!['choose','flight'].includes(phase))marker.visible=false;

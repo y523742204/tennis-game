@@ -4,7 +4,7 @@ import * as THREE from '../dist/vendor/three.module.js';
 import {createPlayer,beginStroke,updatePlayer} from '../dist/player.js';
 
 const player=()=>createPlayer(new THREE.Scene(),'#fff',0,'#333');
-for(const backhand of [false,true])for(const type of ['flat','top','slice']){
+for(const backhand of [false,true])for(const type of ['flat','top','slice','volley','smash']){
   test(`${type} ${backhand?'backhand':'forehand'} stays continuous and contacts once`,()=>{
     const p=player();
     for(let i=0;i<60;i++)updatePlayer(p,1/60);

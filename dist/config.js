@@ -9,7 +9,7 @@ export const CONFIG={
     runCostPerMeter:2.2, // 每移动一米消耗的体力
     shotBaseCost:4, // 每次击球基础消耗
     shotPowerCost:.14, // 每一点力量额外消耗
-    shotTypeCost:{flat:0,top:4,slice:2}, // 平击、上旋、切削附加消耗
+    shotTypeCost:{flat:0,top:4,slice:2,volley:1,smash:5}, // 各球种附加消耗；发球不扣击球体力
     perfectCostMultiplier:.7, // Perfect 消耗倍率
     lowThreshold:30, // 低于此绝对体力值开始降低球速和稳定性
     minimumMoveMultiplier:.45, // 零体力时移动速度倍率
@@ -34,7 +34,7 @@ export const CONFIG={
     arrivalTolerance:.025, // 判定到达移动目标的距离
   },
   shot:{
-    speedKmh:{flat:120,top:115,slice:100}, // 满体力、基准力量下的回球出拍速度，km/h
+    speedKmh:{flat:120,top:115,slice:100,volley:95,smash:155}, // 满体力、基准力量下的出拍速度，km/h
     serveSpeedKmh:180, // 满体力、基准力量的平击发球出拍速度，km/h
     serveTopLossKmh:20, // 满上旋发球速度损失，km/h
     serveSideLossKmh:10, // 满侧旋发球速度损失，km/h
@@ -82,7 +82,7 @@ export const CONFIG={
     topSpin:38, // 上旋角速度
     sliceSpin:-28, // 切削角速度
     serveTopSpin:64, // 发球最大上旋角速度
-    serveSideSpin:85, // 发球最大侧旋角速度
+    serveSideSpin:170, // 发球最大侧旋角速度；增大可加强横向弯曲
   },
   input:{
     holdMs:260, // 长按触发时间
@@ -116,6 +116,10 @@ export const CONFIG={
     returnWidth:7,returnDepthMin:6,returnDepthRange:4, // 回球落点范围
   },
   tactics:{
+    volleyMinHeight:.65,volleyMaxHeight:2.1,volleyDepth:6, // 网前截击高度及距网最远距离，米
+    volleyMaxSpeed:25, // 允许主动截击的软球最高来球速度，米/模拟秒
+    smashMinHeight:2.2,smashMaxHeight:3.5,smashMaxSpeed:27, // 高压：下降高球的高度及速度上限
+    airSetupTime:.16, // 落地前击球的站稳准备时间，模拟秒
     waistHeight:1.1, // 最佳击球高度
     minimumNetDistance:1, // 接球点离网最小距离
     afterBounceTime:.12, // 弹地后最少等待时间
@@ -173,6 +177,7 @@ export const CONFIG={
     mobileWidth:900,mobileHeight:500, // 判定移动端布局的尺寸阈值
     portraitCameraY:32,portraitCameraZ:17,cameraY:20,cameraZ:27, // 相机方向
     cameraFar:220,cameraPadding:1.012, // 相机远平面、取景余量
+    visibleBufferFraction:.45, // 镜头保留的缓冲区比例；越小视角越近，场地实体尺寸不变
     previewMs:70,mobilePreviewMs:120, // 轨迹预览刷新间隔
     previewChangeMs:100,previewGaugeDelta:.02, // 力量变化触发预览的节流
     energyOffset:8, // 体力条距离脚底的屏幕偏移，像素
@@ -190,6 +195,20 @@ export const READY_POSE={right:[1.05,-.15,-.25],left:[.8,.2,.35],elbowR:.65,elbo
 // backhand 控制反手；slice/top 控制切削/上旋，其余为平击。
 export function strokePoses(type,backhand){
   const READY=READY_POSE,side=backhand?-1:1;
+  if(type==='smash'){
+    const coil={...READY,right:[2.2,-.55,-.3],left:[2.5,.1,.2],elbowR:1.5,elbowL:.2,yaw:-.5,hipYaw:-.25,pitch:-.18,bend:.3};
+    const drive={...coil,right:[2.65,-.2,-.2],elbowR:.75,pitch:-.1,bend:.15};
+    const contactPose={...drive,right:[2.85,.15,-.25],left:[1.2,.3,.5],elbowR:.08,yaw:.25,hipYaw:.3,pitch:.15,bend:.08,wrist:[-.45,0,0]};
+    const finish={...contactPose,right:[.95,.8,-.35],left:[.6,.2,.4],elbowR:.7,yaw:.75,pitch:.35,bend:.25};
+    return {coil,drive,contactPose,finish};
+  }
+  if(type==='volley'){
+    const coil={...READY,right:[1.5,-side*.35,-.6],elbowR:.65,yaw:-side*.25,bend:.28};
+    const drive={...coil,right:[1.55,side*.1,-.55],elbowR:.4,yaw:0};
+    const contactPose={...drive,right:[1.6,side*.3,-.5],elbowR:.12,yaw:side*.18,weight:side*.06};
+    const finish={...contactPose,right:[1.45,side*.5,-.45],elbowR:.3,yaw:side*.3,bend:.15};
+    return {coil,drive,contactPose,finish};
+  }
   const slice=type==='slice',top=type==='top';
   const coil={...READY,right:backhand?[1.25,.85,-1.05]:[slice?1.85:.75,-1.0,-.65],left:backhand?[1.1,-.35,.1]:[1.25,.35,.55],elbowR:1.15,elbowL:.7,wrist:[slice?.5:-.45,-.2,side*.3],yaw:-side*.85,hipYaw:-side*.42,pitch:.12,bend:.34,weight:-side*.1};
   const drive={...coil,right:backhand?[1.15,.35,-.85]:[slice?1.65:.9,-.65,-.7],elbowR:.8,hipYaw:side*.15,yaw:-side*.45,bend:.27,weight:side*.025};

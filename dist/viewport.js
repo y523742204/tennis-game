@@ -15,6 +15,8 @@ export function viewportLayout(width,height,safe={},coarse=false){
 }
 export const courtBounds=[];
 const dimensions=courtDimensions();
+dimensions.halfWidth=CFG.court.doublesHalfWidth+CFG.court.sideRun*CFG.view.visibleBufferFraction;
+dimensions.halfLength=CFG.court.halfLength+CFG.court.runBack*CFG.view.visibleBufferFraction;
 for(const x of [-(dimensions.halfWidth+CFG.layout.floorSideMargin),dimensions.halfWidth+CFG.layout.floorSideMargin])for(const z of [-(dimensions.halfLength+CFG.layout.floorDepthMargin),dimensions.halfLength+CFG.layout.floorDepthMargin])courtBounds.push(new THREE.Vector3(x,0,z));
 for(const x of [-dimensions.halfWidth+CFG.court.playerBoundaryMargin,dimensions.halfWidth-CFG.court.playerBoundaryMargin])for(const z of [-dimensions.halfLength+CFG.court.playerBoundaryMargin,dimensions.halfLength-CFG.court.playerBoundaryMargin])courtBounds.push(new THREE.Vector3(x,CFG.layout.playerHeight,z));
 export function fitCourtCamera(camera,layout,end=1){

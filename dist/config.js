@@ -58,7 +58,8 @@ export const CONFIG={
   },
   physics:{
     step:1/240, // 固定物理步长，秒
-    timeScale:.62, // 球与移动模拟相对真实时间的倍率
+    timeScale:.62, // 发球整段飞行（含弹地后）的时间倍率
+    rallyTimeScale:.52, // 回球时间倍率；低于发球值以留出选球时间，不改变测速结果
     maximumFrameTime:.05, // 单帧最大时间，避免切后台后跳变
     gravity:9.81, // 重力加速度
     ballMass:.057, // 网球质量，千克
@@ -86,6 +87,16 @@ export const CONFIG={
     shotDragThreshold:18, // 选球手势最小距离，像素
     serveDeadZone:.12, // 发球圆盘中心平击区半径比例
     keyboardSpinStep:.2, // 方向键每次调整旋转量
+  },
+  audio:{
+    enabled:true, // 默认启用音效；用户可在比赛设置中关闭
+    volume:.35, // 主音量（0~1），浏览器首次点击/按键后启用
+    hitVolume:.65,bounceVolume:.32,netVolume:.25,pointVolume:.2, // 各类事件相对音量
+    hitDuration:.095,perfectDuration:.16, // 击球/Perfect 击球声音长度，秒
+    hitFrequency:190,serveFrequency:150,sliceFrequency:250,topFrequency:175, // 击球低音频率，Hz
+    perfectFrequency:95,perfectChimeFrequency:880, // 暴力击球低音与明亮提示频率
+    bounceFrequency:260,netFrequency:100, // 弹地/触网音色频率
+    bounceCooldown:.08,netCooldown:.15, // 物理重复碰撞音效的最小间隔，秒
   },
   ai:{
     serveWait:1.2, // 电脑准备发球等待时间
@@ -136,6 +147,7 @@ export const CONFIG={
     serveSize:248,shotWidth:290,shotHeight:265, // 手势控件设计尺寸，修改须同步 CSS/SVG
     gestureMobileRight:64,gestureDesktopRight:104,gestureLeft:8, // 手势边界留白
     serveTop:36,shotTop:18,gestureBottom:22, // 手势纵向留白
+    gesturePowerWidth:52,gesturePowerHeight:204,gesturePowerGap:8, // 长按控件旁的力量条尺寸与间距，像素
     floorSideMargin:2.7,floorDepthMargin:3.3, // 场地取景边界相对单打线的余量
     playerSideMargin:1,playerDepthMargin:2.5,playerHeight:2.7, // 球员取景边界余量
   },

@@ -23,3 +23,20 @@ test('new incoming ball and point end discard an old locked shot',()=>{
  const q=new ReturnStrategy();q.open(choice());q.lock(choice('slice'));q.close();assert.equal(q.current(),null);
  q.open(choice());assert.equal(q.locked,null);assert.equal(q.resolve().type,'flat');
 });
+test('selection locked after own shot survives the opponent shot until contact',()=>{
+ const q=new ReturnStrategy();q.afterOwnShot(choice());
+ q.lock({...choice('top',82),perfect:true});
+ q.opponentShot(choice('slice',40));
+ assert.equal(q.current().type,'top');assert.equal(q.resolve().perfect,true);
+ q.afterOwnShot(choice());assert.equal(q.locked,null);
+});
+test('held input survives opponent shot and uses its current power at contact',()=>{
+ const q=new ReturnStrategy();q.afterOwnShot(choice());
+ const before=choice('slice',40);assert.equal(q.current(before).power,40);
+ q.opponentShot(choice());assert.equal(q.active,true);assert.equal(q.locked,null);
+ assert.deepEqual(q.resolve(choice('slice',76)),choice('slice',76));
+});
+test('fault, let and point cleanup discard an outgoing preselection',()=>{
+ const q=new ReturnStrategy();q.afterOwnShot(choice());q.lock(choice('top',90));q.close();
+ q.opponentShot(choice());assert.equal(q.current().power,65);assert.equal(q.locked,null);
+});

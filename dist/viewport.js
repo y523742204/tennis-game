@@ -28,7 +28,8 @@ export function fitCourtCamera(camera,layout,end=1){
 }
 export function gesturePlacement(layout,x,y,kind){
   const dial=kind==='serve',baseWidth=dial?CFG.layout.serveSize:CFG.layout.shotWidth,baseHeight=dial?CFG.layout.serveSize:CFG.layout.shotHeight;
-  const {width,height,safe}=layout,right=width-safe.right-(layout.mobile?CFG.layout.gestureMobileRight:CFG.layout.gestureDesktopRight),left=safe.left+CFG.layout.gestureLeft,top=safe.top+(dial?CFG.layout.serveTop:CFG.layout.shotTop),bottom=height-safe.bottom-CFG.layout.gestureBottom;
+  const powerReserve=CFG.layout.gesturePowerWidth+CFG.layout.gesturePowerGap*2;
+  const {width,height,safe}=layout,right=width-safe.right-Math.max(powerReserve,layout.mobile?CFG.layout.gestureMobileRight:CFG.layout.gestureDesktopRight),left=safe.left+CFG.layout.gestureLeft,top=safe.top+(dial?CFG.layout.serveTop:CFG.layout.shotTop),bottom=height-safe.bottom-CFG.layout.gestureBottom;
   const scale=Math.min(1,(right-left)/baseWidth,(bottom-top)/baseHeight);
   const w=baseWidth*scale,h=baseHeight*scale;
   return {scale,left:clamp(x-w/2,left,right-w),top:clamp(y-h/2,top,bottom-h),width:w,height:h};
@@ -37,4 +38,13 @@ export function directionShot(dx,dy){
   if(Math.hypot(dx,dy)<CFG.input.shotDragThreshold)return null;
   const vectors=[{type:'top',x:0,y:-1},{type:'flat',x:-Math.SQRT1_2,y:Math.SQRT1_2},{type:'slice',x:Math.SQRT1_2,y:Math.SQRT1_2}];
   return vectors.sort((a,b)=>(dx*b.x+dy*b.y)-(dx*a.x+dy*a.y))[0].type;
+}
+export function gesturePowerPlacement(layout,gesture){
+  const {safe,width,height}=layout,gap=CFG.layout.gesturePowerGap;
+  const w=CFG.layout.gesturePowerWidth,h=CFG.layout.gesturePowerHeight;
+  const scale=Math.min(1,(height-safe.top-safe.bottom-gap*2)/h,(width-safe.left-safe.right-gap*2)/w);
+  const pw=w*scale,ph=h*scale,right=width-safe.right-gap,left=safe.left+gap;
+  const beside=gesture.left+gesture.width+gap;
+  const x=beside+pw<=right?beside:gesture.left-gap-pw;
+  return {left:clamp(x,left,right-pw),top:clamp(gesture.top+(gesture.height-ph)/2,safe.top+gap,height-safe.bottom-gap-ph),width:pw,height:ph,scale};
 }

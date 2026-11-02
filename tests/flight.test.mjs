@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {servePad,spinVector,aerodynamicForce,PHYSICS_STEP} from '../dist/flight.js';
+import {servePad,spinVector,aerodynamicForce,PHYSICS_STEP,flightTimeScale} from '../dist/flight.js';
 test('serve joystick has a flat center, upper topspin and bounded mixed directions',()=>{
  assert.deepEqual(servePad(.04,.02),{x:0,y:0});
  assert.deepEqual(servePad(0,-1),{x:0,y:0});
@@ -21,4 +21,8 @@ test('left and right serve spin produce opposite physical flight curves',()=>{
 test('topspin stays downward and screen-right sidespin reverses after changing ends',()=>{
  const v={x:2,y:0,z:16},spin=spinVector('flat',v,{x:1,y:1});
  const force=aerodynamicForce(v,spin);assert.ok(force.y<0);assert.ok(force.x<0);
+});
+test('serve tempo is unchanged while rallies get a longer real-time selection window',()=>{
+ assert.equal(flightTimeScale(true),.62);assert.equal(flightTimeScale(false),.52);
+ assert.ok(1/flightTimeScale(false)>1/flightTimeScale(true));
 });

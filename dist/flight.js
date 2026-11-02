@@ -1,5 +1,7 @@
 import {CONFIG as CFG} from './config.js';
 export const PHYSICS_STEP=CFG.physics.step;
+// 用出拍时的球种决定整段飞行倍率，发球弹地后也保持发球节奏。
+export const flightTimeScale=serving=>serving?CFG.physics.timeScale:CFG.physics.rallyTimeScale;
 export function servePad(x,y) {
   y=Math.max(0,y);
   const length=Math.hypot(x,y),scale=length>1?1/length:1;

@@ -1,11 +1,12 @@
 import {solveShot,speedKmh} from './shot.js';
+import {TennisAudio} from './audio.js';
 import {CONFIG as CFG} from './config.js';
-import {viewportLayout,fitCourtCamera,gesturePlacement,directionShot} from './viewport.js';
+import {viewportLayout,fitCourtCamera,gesturePlacement,gesturePowerPlacement,directionShot} from './viewport.js';
 import {Stamina,staminaEffects,fatigueTarget,staminaDisplay} from './stamina.js';
 import {ReturnStrategy} from './return-strategy.js';
 import {selectContact,recoveryPosition} from './tactics.js';
 import {createPlayer,beginStroke,updatePlayer,strokeProgress} from './player.js';
-import {servePad,spinVector,aerodynamicForce,PHYSICS_STEP} from './flight.js';
+import {servePad,aerodynamicForce,PHYSICS_STEP,flightTimeScale} from './flight.js';
 import {TennisMatch,validServiceLanding} from './rules.js';
 import * as C from './vendor/cannon-es.js';
 import * as THREE from './vendor/three.module.js';
@@ -31,8 +32,9 @@ const physicalBall=new C.Body({mass:CFG.physics.ballMass,material:felt,shape:new
 
 const $=id=>document.getElementById(id),players=[human,cpu];
 const energy=new Stamina();
+const sounds=new TennisAudio();
 let match=new TennisMatch(),difficulty=CFG.match.difficulty,phase='menu',started=false,paused=false,stamina=energy.values,ends=[1,-1];
-let lastHitter=0,bounces=0,decision=null,isServe=true,serveAttempt=1,netTouched=false;
+let lastHitter=0,bounces=0,decision=null,isServe=true,serveAttempt=1,netTouched=false,flightIsServe=true;
 let plan=null,elapsed=0,acc=0,aiWait=0,turn=1,aim={x:-2,z:-4},selected='top',gauge=.5,dirty=true,hold=null;
 const wheel=$('wheel'),canvas=renderer.domElement;
 let screenLayout=null,previousViewport=null;
@@ -54,6 +56,8 @@ function placeCurrentGesture(){
  if(!hold||!screenLayout)return;
  const kind=hold.mode==='serve'?'serve':'rally',p=gesturePlacement(screenLayout,hold.x,hold.y,kind),element=kind==='serve'?$('serveDial'):wheel;
  element.style.left=p.left+'px';element.style.top=p.top+'px';element.style.transform='scale('+p.scale+')';element.style.transformOrigin='top left';
+ const power=gesturePowerPlacement(screenLayout,p),panel=$('powerPanel');
+ panel.style.left=power.left+'px';panel.style.top=power.top+'px';panel.style.width=CFG.layout.gesturePowerWidth+'px';panel.style.height=CFG.layout.gesturePowerHeight+'px';panel.style.transform='scale('+power.scale+')';
  if(kind==='serve')hold.radius=82*p.scale;else hold.origin={x:p.left+145*p.scale,y:p.top+140*p.scale};
 }
 
@@ -62,6 +66,7 @@ let recoveryTargets=[null,null],recoveryDelay=[0,0];
 const returnStrategy=new ReturnStrategy();
 let rallyWindup=null,retiredPointerId=null,ignoreNextClick=false;
 function incomingReturn(){return phase==='flight'&&lastHitter===1&&plan?.receiver===0&&returnStrategy.active}
+function choosingReturn(){return phase==='flight'&&returnStrategy.active}
 function servingInput(){return phase==='choose'&&isServe&&match.server===0}
 function currentReturnChoice(now=performance.now()){
  const charging=hold?.ready&&hold.mode==='rally',value=charging?(1-Math.cos((now-hold.chargeStart)*CFG.input.chargeRate))/2:.5;
@@ -106,7 +111,7 @@ function updateContactGuide(){contactGuide.visible=!!plan&&phase==='flight';if(!
 // Highlight the only legal service box, independently from the predicted landing.
 const serviceBox=new THREE.Mesh(new THREE.PlaneGeometry(CFG.court.halfWidth,CFG.court.serviceDepth),new THREE.MeshBasicMaterial({color:'#e8f394',transparent:true,opacity:.14,depthWrite:false}));serviceBox.rotation.x=-Math.PI/2;serviceBox.position.y=-.025;scene.add(serviceBox);
 function say(text){message.textContent=text}
-function ready(){return (phase==='choose'||(incomingReturn()&&!returnStrategy.locked))&&!paused&&$('startMenu').hidden&&$('sideMenu').hidden&&match.winner===null}
+function ready(){return (servingInput()||(choosingReturn()&&!returnStrategy.locked))&&!paused&&$('startMenu').hidden&&$('sideMenu').hidden&&match.winner===null}
 let lastShotSpeed=null;
 function showShotSpeed(who,type,serving,perfect,velocity){
  const kmh=Math.round(speedKmh(velocity));lastShotSpeed={who,kmh,perfect};
@@ -123,7 +128,7 @@ function ui(){
  $('pointHeading').textContent=match.tieBreak?'TB':'分';
  $('scoreStatus').textContent=match.winner!==null?'比赛结束':match.tieBreak?'TIEBREAK / 抢七':match.decidingPoint?'GOLDEN POINT':match.points.every(p=>p>=3)?(match.points[0]===match.points[1]?'DEUCE / 平分':'ADVANTAGE / 占先'):'SET 1';
  $('serviceStatus').textContent=(match.tieBreak?'抢七':'第 '+(match.games[0]+match.games[1]+1)+' 局')+' · '+(match.server===0?'你':'电脑')+'发球 · '+(match.serviceSide===0?'一区 / 右区':'二区 / 左区')+(isServe?' · '+(serveAttempt===1?'一发':'二发')+(phase==='choose'?' · 长按旋转圆盘':''):'');
- if(incomingReturn())$('serviceStatus').textContent+=' · '+(returnStrategy.locked?'已锁定 '+({top:'上旋',flat:'平击',slice:'切削'}[returnStrategy.locked.type])+' '+returnStrategy.locked.power+'%':'来球中 · 长按预选');
+ if(choosingReturn())$('serviceStatus').textContent+=' · '+(returnStrategy.locked?'已锁定 '+({top:'上旋',flat:'平击',slice:'切削'}[returnStrategy.locked.type])+' '+returnStrategy.locked.power+'%':lastHitter===0?'已出球 · 可预选下一拍':'来球中 · 长按预选');
  if(paused&&$('startMenu').hidden)$('serviceStatus').textContent='已暂停 · 点击球场或 P 继续 / Esc 设置';
  else if(phase==='point')$('serviceStatus').textContent+=' · 点击球场继续';
  else if(phase==='fault')$('serviceStatus').textContent+=' · 发球失误 / 擦网，点击重发';
@@ -185,6 +190,7 @@ function prepareServe(){
 }
 function finishPoint(who,reason){
  clearReturn();cancelHold();const result=match.award(who);energy.finishPoint(result.game);
+ sounds.point(who===0);
  if(result.changeEnds){ends=ends.map(v=>-v);viewEnd()}
  phase=match.winner===null?'point':'end';plan=null;recoveryTargets=[null,null];contactGuide.visible=false;acc=0;serveAttempt=1;serviceBox.visible=false;marker.visible=false;aimLine.visible=false;
  say((who===0?'你得分':'电脑得分')+' · '+reason+(result.set?' · 本盘结束':result.game?' · 本局结束，交换发球权'+(result.changeEnds?'并交换场地':''):''));ui();
@@ -196,7 +202,8 @@ function serviceFault(reason){
 }
 physicalBall.addEventListener('collide',e=>{
  if(phase!=='flight'||decision)return;
- if(e.body===netBody){netTouched=true;return}if(e.body!==floor)return;
+ if(e.body===netBody){netTouched=true;sounds.net();return}if(e.body!==floor)return;
+ sounds.bounce();
  const p=physicalBall.position;
  if(isServe){
   const valid=validServiceLanding(p.x,p.z,ends[match.server],match.serviceSide);
@@ -216,21 +223,30 @@ function strike(who,type,power,perfect=false){
  beginStroke(players[who],{type,backhand,serve:serving,pad});aimLine.visible=false;marker.visible=false;ui();
 }
 function launchStroke(who,type,power,perfect=false,pad=null,returnChoice=null){
- cancelHold();clearReturn();
+ if(who===0){cancelHold();clearReturn()}else rallyWindup=null;
  const serving=isServe,sign=ends[who]*(match.serviceSide===0?1:-1);
+ flightIsServe=serving;
  let target=who===0?{...(returnChoice?.target||aim)}:serving?{x:-sign*(CFG.ai.serveXMin+Math.random()*CFG.ai.serveXRange),z:-ends[who]*(CFG.ai.serveDepthMin+Math.random()*CFG.ai.serveDepthRange)}:{x:(Math.random()-.5)*CFG.ai.returnWidth,z:-ends[who]*(CFG.ai.returnDepthMin+Math.random()*CFG.ai.returnDepthRange)};
  if(who===0&&!perfect){target.x+=(Math.random()-.5)*Math.abs((returnChoice?.gauge??gauge)-.5)*CFG.shot.timingScatter;target.z+=(power-CFG.shot.neutralPower)*CFG.shot.powerDepthOffset}
  target=fatigueTarget(target,stamina[who]);
  const shot=trajectory(who,type,target,power,perfect,pad);physicalBall.velocity.copy(shot.v);physicalBall.angularVelocity.set(shot.spin.x,shot.spin.y,shot.spin.z);physicalBall.force.setZero();physicalBall.torque.setZero();
  showShotSpeed(who,type,serving,perfect,physicalBall.velocity);
+ sounds.hit({type,serving,perfect,speed:speedKmh(physicalBall.velocity)});
  energy.spend(who,cost(power,type)*(perfect?CFG.stamina.perfectCostMultiplier:1));lastHitter=who;bounces=0;decision=null;netTouched=false;elapsed=0;acc=0;phase='flight';plan=predict();
  recoveryTargets[1-who]=null;recoveryTargets[who]=recoveryPosition({end:ends[who],opponentContact:plan?.ball||shot.landing||target,strikePosition:players[who].position});recoveryDelay[who]=CFG.movement.recoveryDelay;updateContactGuide();
  if(plan){
   rallyWindup={receiver:plan.receiver,started:false,choice:plan.receiver===1?{type:['top','flat','slice'][Math.floor(Math.random()*3)],power:CFG.ai.returnPowerMin+Math.random()*CFG.ai.returnPowerRange,perfect:false}:null};
-  if(who===1){selected='flat';gauge=.5;aim={x:THREE.MathUtils.clamp(-plan.ball.x*.35,-4.2,4.2),z:-ends[0]*8};returnStrategy.open(currentReturnChoice());dirty=true;}
  }
+ if(who===0){
+  selected='flat';gauge=.5;aim={x:THREE.MathUtils.clamp(-target.x*.35,-4.2,4.2),z:-ends[0]*8};
+  returnStrategy.afterOwnShot(currentReturnChoice());
+ }else if(plan){
+  if(!returnStrategy.active){selected='flat';gauge=.5;aim={x:THREE.MathUtils.clamp(-plan.ball.x*.35,-4.2,4.2),z:-ends[0]*8}}
+  returnStrategy.opponentShot(currentReturnChoice());
+ }
+ dirty=true;
  aimLine.visible=false;marker.visible=!!plan?.landing;if(marker.visible)marker.position.set(plan.landing.x,.015,plan.landing.z);
- say(perfect?`PERFECT 暴力击球 ✦ 球速 +${Math.round((CFG.shot.perfectSpeed-1)*100)}% · 击球体力消耗 −${Math.round((1-CFG.stamina.perfectCostMultiplier)*100)}%`:who===0?'电脑正在预判落点…':'对手已出球 · 来球途中长按选策略，提前松手锁定，到点自动击球');
+ say(perfect?`PERFECT 暴力击球 ✦ 球速 +${Math.round((CFG.shot.perfectSpeed-1)*100)}% · 击球体力消耗 −${Math.round((1-CFG.stamina.perfectCostMultiplier)*100)}%`:who===0?'已出球 · 现在即可长按预选下一拍，松手锁定':returnStrategy.locked?'对手已出球 · 已保留锁定策略，到点自动击球':'对手已出球 · 长按选择仍有效，到点自动击球');
  if(perfect){ball.material.emissive.set('#ffc547');ball.material.emissiveIntensity=1;setTimeout(()=>{ball.material.emissive.set('#687a16');ball.material.emissiveIntensity=.3},1500)}ui();
 }
 function step(dt){
@@ -241,7 +257,7 @@ function step(dt){
  if(decision){const d=decision;decision=null;if(d.type==='fault')serviceFault(d.reason);else if(d.type==='let'){phase='fault';plan=null;clearReturn();cancelHold();recoveryTargets=[null,null];contactGuide.visible=false;acc=0;say('发球擦网且落区正确 · 重发，保留当前发球次数');ui()}else finishPoint(d.who,d.reason);return}
  if(plan){
   // Prepare the swing before the deadline while ball physics and running continue.
-  if(rallyWindup&&!rallyWindup.started&&plan.time-elapsed<=CFG.animation.strokeDuration*CFG.animation.contact*CFG.physics.timeScale){
+  if(rallyWindup&&!rallyWindup.started&&plan.time-elapsed<=CFG.animation.strokeDuration*CFG.animation.contact*flightTimeScale(flightIsServe)){
    const choice=plan.receiver===0?returnStrategy.current(currentReturnChoice()):rallyWindup.choice;
    beginStroke(players[plan.receiver],{type:choice?.type||'flat',backhand:plan.backhand,serve:false});rallyWindup.started=true;
   }
@@ -250,7 +266,7 @@ function step(dt){
    if(Math.hypot(p.position.x-plan.x,p.position.z-plan.z)<CFG.shot.contactTolerance){
     const choice=receiver===0?returnStrategy.resolve(currentReturnChoice()):rallyWindup?.choice||{type:'flat',power:CFG.shot.neutralPower,perfect:false};
     const backhand=plan.backhand;marker.visible=false;contactGuide.visible=false;turn++;
-    if(hold)retiredPointerId=hold.id;cancelHold();
+    if(receiver===0){if(hold)retiredPointerId=hold.id;cancelHold()}
     if(!players[receiver].userData.rig.swing)beginStroke(players[receiver],{type:choice.type,backhand,serve:false});
     const swing=players[receiver].userData.rig.swing;swing.type=choice.type;swing.backhand=backhand;swing.time=swing.duration*swing.contact;swing.hit=true;
     if(receiver===0){selected=choice.type;gauge=choice.gauge;aim={...choice.target}}
@@ -274,7 +290,7 @@ function showWheel(){
   placeCurrentGesture();$('serveDial').hidden=false;
   hold.spinOrigin={x:hold.x,y:hold.y};serveSpin={x:0,y:0};updateServeDial();say('拖动圆心：平击 / 上旋 / 左右侧旋；斜向可混合旋转');
  }else{
-  placeCurrentGesture();wheel.hidden=false;hold.pressOrigin={x:hold.x,y:hold.y};updateNodes();say('↑ 上旋 / ↙ 平击 / ↘ 切削 · 右侧金色力量区松手 = PERFECT');
+  placeCurrentGesture();wheel.hidden=false;hold.pressOrigin={x:hold.x,y:hold.y};updateNodes();say('↑ 上旋 / ↙ 平击 / ↘ 切削 · 旁边力量条的金色区域松手 = PERFECT');
  }
  $('powerPanel').hidden=false;dirty=true;
 }
@@ -286,7 +302,7 @@ function moveHold(e){
 }
 function finishHold(e){
  if(!hold){if(e.pointerId===retiredPointerId){retiredPointerId=null;ignoreNextClick=true}return}
- if(e.pointerId!==hold.id)return;const didHold=hold.ready,isReturn=incomingReturn(),choice=currentReturnChoice();
+ if(e.pointerId!==hold.id)return;const didHold=hold.ready,isReturn=choosingReturn(),choice=currentReturnChoice();
  if(didHold)gauge=(1-Math.cos((performance.now()-hold.chargeStart)*CFG.input.chargeRate))/2;
  cancelHold();if(!didHold){say(`请长按至少 ${CFG.input.holdMs/1000} 秒，拖动后松手锁定`);return}
  if(isReturn){if(returnStrategy.lock(choice)){dirty=true;say('策略已锁定 · 到达腰部击球点自动执行');ui()}return}
@@ -312,7 +328,7 @@ function updateVisuals(now,dt){
  shadow.position.set(physicalBall.position.x,-.015,physicalBall.position.z);shadow.scale.setScalar(1+physicalBall.position.y*.1);shadow.material.opacity=.3/(1+physicalBall.position.y*.25);
  if(hold?.ready&&!paused){const liveGauge=(1-Math.cos((now-hold.chargeStart)*CFG.input.chargeRate))/2;if(Math.abs(liveGauge-gauge)>CFG.view.previewGaugeDelta&&now-lastPreviewTime>CFG.view.previewChangeMs)dirty=true;gauge=liveGauge}
  const returnPreview=incomingReturn(),previewChoice=returnPreview?returnStrategy.current(currentReturnChoice(now)):null;
- aimLine.visible=(ready()||returnPreview)&&!animationPaused;
+ aimLine.visible=(servingInput()||returnPreview)&&!animationPaused;
  if(aimLine.visible&&dirty&&now-lastPreviewTime>(screenLayout?.mobile?CFG.view.mobilePreviewMs:CFG.view.previewMs)){
   dirty=false;lastPreviewTime=now;
   const shot=trajectory(0,previewChoice?.type||selected,previewChoice?.target||aim,previewChoice?.power||(hold?.ready?Math.round(CFG.input.minimumPower+gauge*CFG.input.powerRange):CFG.shot.neutralPower),previewChoice?previewChoice.perfect:!!hold?.ready&&Math.abs(gauge-CFG.input.perfectCenter)<=CFG.input.perfectHalfWidth,servingInput()?serveSpin:null,returnPreview?plan.ball:null);
@@ -336,7 +352,11 @@ for(const node of document.querySelectorAll('[data-side]'))node.onclick=()=>{mat
 addEventListener('blur',()=>{cancelHold();if(phase==='flight'||phase==='ai'||phase==='stroke'){paused=true;say('已暂停 · P 继续');ui()}});
  document.addEventListener('visibilitychange',()=>{if(document.hidden){cancelHold();if(started&&['flight','ai','stroke'].includes(phase)){paused=true;ui()}}});
 $('courtMenu').onclick=openMenu;
+$('soundEnabled').checked=sounds.enabled;
+$('soundEnabled').onchange=()=>{sounds.setEnabled($('soundEnabled').checked);if(sounds.enabled)void sounds.unlock()};
+document.addEventListener('pointerdown',()=>{void sounds.unlock()},{capture:true});
+document.addEventListener('keydown',()=>{void sounds.unlock()},{capture:true});
 const perfectZone=document.querySelector('.perfect-zone');perfectZone.style.bottom=(CFG.input.perfectCenter-CFG.input.perfectHalfWidth)*100+'%';perfectZone.style.height=CFG.input.perfectHalfWidth*200+'%';
 new ResizeObserver(resizeCourt).observe(arena);
-let last=performance.now();function tick(now){requestAnimationFrame(tick);const dt=Math.min((now-last)/1000,CFG.physics.maximumFrameTime);last=now;if(!paused&&$('startMenu').hidden){if(['stroke','flight'].includes(phase))energy.recover(dt);if(phase==='ai'){aiWait-=dt;if(aiWait<=0)strike(1,serveAttempt===2?'top':'flat',CFG.ai.servePowerMin+Math.random()*CFG.ai.servePowerRange)}else if(phase==='stroke'){recoverPlayers(dt*CFG.physics.timeScale,pendingStroke?.who)}else if(phase==='flight'){acc+=dt*CFG.physics.timeScale;while(acc>=PHYSICS_STEP&&phase==='flight'){acc-=PHYSICS_STEP;step(PHYSICS_STEP)}ui()}}updateVisuals(now,dt);renderer.render(scene,camera)}
+let last=performance.now();function tick(now){requestAnimationFrame(tick);const dt=Math.min((now-last)/1000,CFG.physics.maximumFrameTime);last=now;if(!paused&&$('startMenu').hidden){if(['stroke','flight'].includes(phase))energy.recover(dt);if(phase==='ai'){aiWait-=dt;if(aiWait<=0)strike(1,serveAttempt===2?'top':'flat',CFG.ai.servePowerMin+Math.random()*CFG.ai.servePowerRange)}else if(phase==='stroke'){recoverPlayers(dt*CFG.physics.timeScale,pendingStroke?.who)}else if(phase==='flight'){acc+=dt*flightTimeScale(flightIsServe);while(acc>=PHYSICS_STEP&&phase==='flight'){acc-=PHYSICS_STEP;step(PHYSICS_STEP)}ui()}}updateVisuals(now,dt);renderer.render(scene,camera)}
 physicalBall.position.set(0,1.3,10);ui();requestAnimationFrame(tick);

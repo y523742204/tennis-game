@@ -1,26 +1,28 @@
+import {CONFIG as CFG} from './config.js';
 const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
-export const WAIST_HEIGHT=1.1;
-export function travelTime(distance,speed,stamina=100) {
+export const WAIST_HEIGHT=CFG.tactics.waistHeight;
+export function travelTime(distance,speed,stamina=CFG.stamina.full) {
   if(distance<=0)return 0;
-  const base=speed/(.45+.0055*stamina),decay=base*.0055*2.2;
-  const tiring=Math.min(distance,stamina/2.2),remaining=distance-tiring;
-  return Math.log(speed/Math.max(base*.45,speed-decay*tiring))/decay+remaining/(base*.45);
+  const slope=(1-CFG.stamina.minimumMoveMultiplier)/CFG.stamina.full,base=speed/(CFG.stamina.minimumMoveMultiplier+slope*stamina),decay=base*slope*CFG.stamina.runCostPerMeter;
+  if(decay===0)return distance/speed;
+  const tiring=Math.min(distance,stamina/CFG.stamina.runCostPerMeter),remaining=distance-tiring;
+  return Math.log(speed/Math.max(base*CFG.stamina.minimumMoveMultiplier,speed-decay*tiring))/decay+remaining/(base*CFG.stamina.minimumMoveMultiplier);
 }
-export function selectContact(samples,{position,end,speed,stamina=100}) {
+export function selectContact(samples,{position,end,speed,stamina=CFG.stamina.full}) {
   const candidates=[];
   for(const ball of samples){
-    if(ball.bounces!==1||!ball.landing||ball.z*end<=1||ball.vz*end<=0)continue;
+    if(ball.bounces!==1||!ball.landing||ball.z*end<=CFG.tactics.minimumNetDistance||ball.vz*end<=0)continue;
     const extension=Math.hypot(ball.x-ball.landing.x,ball.z-ball.landing.z);
     const afterBounce=ball.time-ball.landing.time;
-    if(afterBounce<.12||extension<.7||ball.y<.4||ball.y>1.65)continue;
+    if(afterBounce<CFG.tactics.afterBounceTime||extension<CFG.tactics.minimumExtension||ball.y<CFG.tactics.minimumHeight||ball.y>CFG.tactics.maximumHeight)continue;
     // Stand behind and beside the ball: leave racket space on either wing.
-    const stances=[{x:ball.x-.68*end,z:ball.z+.6*end,backhand:false},{x:ball.x+.68*end,z:ball.z+.6*end,backhand:true}];
+    const stances=[{x:ball.x-CFG.tactics.stanceSide*end,z:ball.z+CFG.tactics.stanceBehind*end,backhand:false},{x:ball.x+CFG.tactics.stanceSide*end,z:ball.z+CFG.tactics.stanceBehind*end,backhand:true}];
     for(const stance of stances){
       const distance=Math.hypot(stance.x-position.x,stance.z-position.z);
       const setup=ball.time-travelTime(distance,speed,stamina);
       candidates.push({...stance,time:ball.time,ball,landing:ball.landing,distance,extension,setup,
-        reachable:setup>=.1,waist:Math.abs(ball.y-WAIST_HEIGHT)<=.16&&extension>=1.05,
-        score:Math.abs(ball.y-WAIST_HEIGHT)*6+distance*.035+ball.time*.025+(stance.backhand?.025:0)});
+        reachable:setup>=CFG.tactics.setupTime,waist:Math.abs(ball.y-WAIST_HEIGHT)<=CFG.tactics.waistTolerance&&extension>=CFG.tactics.waistExtension,
+        score:Math.abs(ball.y-WAIST_HEIGHT)*CFG.tactics.heightWeight+distance*CFG.tactics.distanceWeight+ball.time*CFG.tactics.timeWeight+(stance.backhand?CFG.tactics.backhandPenalty:0)});
     }
   }
   if(!candidates.length)return null;
@@ -33,12 +35,12 @@ export function selectContact(samples,{position,end,speed,stamina=100}) {
   return (ascending.length?ascending:eligible).sort((a,b)=>a.score-b.score)[0];
 }
 export function recoveryPosition({end,opponentContact,strikePosition}) {
-  const depth=Math.abs(strikePosition.z)<6?8.6:10.8,z=end*depth;
-  const opponent=opponentContact||{x:0,z:-end*10};
-  const baseline=end*12;
-  const left={x:-4.5-opponent.x,z:baseline-opponent.z},right={x:4.5-opponent.x,z:baseline-opponent.z};
+  const depth=Math.abs(strikePosition.z)<CFG.tactics.approachDepth?CFG.tactics.nearRecoveryDepth:CFG.tactics.deepRecoveryDepth,z=end*depth;
+  const opponent=opponentContact||{x:0,z:-end*CFG.tactics.fallbackOpponentDepth};
+  const baseline=end*CFG.court.halfLength;
+  const left={x:-CFG.court.halfWidth-opponent.x,z:baseline-opponent.z},right={x:CFG.court.halfWidth-opponent.x,z:baseline-opponent.z};
   const l=Math.hypot(left.x,left.z)||1,r=Math.hypot(right.x,right.z)||1;
   const bisector={x:left.x/l+right.x/r,z:left.z/l+right.z/r};
   const x=Math.abs(bisector.z)>.001?opponent.x+(z-opponent.z)*bisector.x/bisector.z:0;
-  return {x:clamp(x,-2.8,2.8),z};
+  return {x:clamp(x,-CFG.tactics.recoveryWidth,CFG.tactics.recoveryWidth),z};
 }

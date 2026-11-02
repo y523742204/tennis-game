@@ -1,6 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {Stamina,staminaEffects,fatigueTarget} from '../dist/stamina.js';
+import {Stamina,staminaEffects,fatigueTarget,staminaDisplay} from '../dist/stamina.js';
+import {CONFIG} from '../dist/config.js';
 test('time recovery is frame independent and capped',()=>{
  const a=new Stamina(),b=new Stamina();a.spend(0,50);b.spend(0,50);
  a.recover(5);for(let i=0;i<50;i++)b.recover(.1);
@@ -28,4 +29,31 @@ test('low energy slows movement and shots and increases bounded target error',()
 test('new match clears exhaustion and caps',()=>{
  const e=new Stamina();e.spend(0,100);e.finishPoint();e.spend(1,100);e.reset();
  assert.deepEqual(e.values,[100,100]);assert.deepEqual(e.caps,[100,100]);assert.deepEqual(e.exhausted,[false,false]);
+});
+test('point-end refill eases toward 90 with a permanent 10 percent dead zone',()=>{
+ const e=new Stamina();e.spend(0,100);e.finishPoint();
+ let display=staminaDisplay(0,0,e.values[0],e.caps[0],1/60);
+ assert.ok(display.displayed>0&&display.displayed<90);
+ assert.ok(Math.abs(display.deadZone-.1)<1e-9);
+ for(let i=0;i<300;i++)display=staminaDisplay(display.displayed,display.trailing,90,90,1/60);
+ assert.equal(display.displayed,90);assert.equal(display.fill,.9);assert.ok(display.trail<=.9);
+ const clipped=staminaDisplay(100,100,90,90,0);
+ assert.equal(clipped.fill,.9);assert.equal(clipped.trail,.9);
+});
+test('display recovery uses elapsed time and respects configured recovery speed',()=>{
+ const whole=staminaDisplay(10,10,90,90,.5);
+ let split={displayed:10,trailing:10};
+ for(let i=0;i<30;i++)split=staminaDisplay(split.displayed,split.trailing,90,90,1/60);
+ assert.ok(Math.abs(whole.displayed-split.displayed)<1e-9);
+ const old=CONFIG.stamina.displayRiseRate;
+ try{CONFIG.stamina.displayRiseRate=old/2;assert.ok(staminaDisplay(10,10,90,90,.5).displayed<whole.displayed)}finally{CONFIG.stamina.displayRiseRate=old}
+});
+test('stamina configuration changes recovery, cap loss and low-energy penalties',()=>{
+ const old={...CONFIG.stamina};
+ try{
+  Object.assign(CONFIG.stamina,{recoveryPerSecond:5,capRetention:.8,lowThreshold:50,maximumScatter:3});
+  const e=new Stamina();e.spend(0,100);e.recover(1);assert.equal(e.values[0],5);
+  e.finishPoint();assert.equal(e.caps[0],80);
+  assert.ok(staminaEffects(40).pace<1);assert.equal(staminaEffects(0).scatter,3);
+ }finally{Object.assign(CONFIG.stamina,old)}
 });

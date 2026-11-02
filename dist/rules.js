@@ -1,9 +1,10 @@
+import {CONFIG as CFG} from './config.js';
 export function serviceTargetSign(serverEnd, side) { return -serverEnd*(side===0?1:-1); }
-export function validServiceLanding(x,z,serverEnd,side,radius=.17) {
-  return x*serviceTargetSign(serverEnd,side)>=-radius&&Math.abs(x)<=4.5+radius&&z*serverEnd<=radius&&Math.abs(z)<=5.5+radius;
+export function validServiceLanding(x,z,serverEnd,side,radius=CFG.physics.ballRadius) {
+  return x*serviceTargetSign(serverEnd,side)>=-radius&&Math.abs(x)<=CFG.court.halfWidth+radius&&z*serverEnd<=radius&&Math.abs(z)<=CFG.court.serviceDepth+radius;
 }
 export class TennisMatch {
-  constructor({gamesToWin=6, noAd=false}={}) {
+  constructor({gamesToWin=CFG.match.gamesToWin, noAd=CFG.match.noAd}={}) {
     this.gamesToWin=gamesToWin; this.noAd=noAd;
     this.points=[0,0]; this.games=[0,0]; this.sets=[0,0];
     this.gameServer=0; this.tieBreak=false; this.winner=null; this.sideOverride=null;

@@ -1,4 +1,5 @@
 import {CONFIG as CFG} from './config.js';
+import {courtDimensions} from './court.js';
 import * as THREE from './vendor/three.module.js';
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 export function viewportLayout(width,height,safe={},coarse=false){
@@ -13,8 +14,9 @@ export function viewportLayout(width,height,safe={},coarse=false){
   return {width,height,safe:inset,mobile,portrait,rect:{left,top,right,bottom},powerWidth:mobile?CFG.layout.mobilePowerWidth:CFG.layout.desktopPowerWidth};
 }
 export const courtBounds=[];
-for(const x of [-(CFG.court.halfWidth+CFG.layout.floorSideMargin),CFG.court.halfWidth+CFG.layout.floorSideMargin])for(const z of [-(CFG.court.halfLength+CFG.layout.floorDepthMargin),CFG.court.halfLength+CFG.layout.floorDepthMargin])courtBounds.push(new THREE.Vector3(x,0,z));
-for(const x of [-(CFG.court.halfWidth+CFG.layout.playerSideMargin),CFG.court.halfWidth+CFG.layout.playerSideMargin])for(const z of [-(CFG.court.halfLength+CFG.layout.playerDepthMargin),CFG.court.halfLength+CFG.layout.playerDepthMargin])courtBounds.push(new THREE.Vector3(x,CFG.layout.playerHeight,z));
+const dimensions=courtDimensions();
+for(const x of [-(dimensions.halfWidth+CFG.layout.floorSideMargin),dimensions.halfWidth+CFG.layout.floorSideMargin])for(const z of [-(dimensions.halfLength+CFG.layout.floorDepthMargin),dimensions.halfLength+CFG.layout.floorDepthMargin])courtBounds.push(new THREE.Vector3(x,0,z));
+for(const x of [-dimensions.halfWidth+CFG.court.playerBoundaryMargin,dimensions.halfWidth-CFG.court.playerBoundaryMargin])for(const z of [-dimensions.halfLength+CFG.court.playerBoundaryMargin,dimensions.halfLength-CFG.court.playerBoundaryMargin])courtBounds.push(new THREE.Vector3(x,CFG.layout.playerHeight,z));
 export function fitCourtCamera(camera,layout,end=1){
   const {width,height,rect}=layout,cx=(rect.left+rect.right)/2,cy=(rect.top+rect.bottom)/2;
   camera.aspect=width/height;camera.far=CFG.view.cameraFar;camera.clearViewOffset();

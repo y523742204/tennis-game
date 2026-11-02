@@ -28,7 +28,8 @@ export class Stamina {
 }
 export function staminaEffects(value){
   const energy=clamp(value,0,CFG.stamina.full),fatigue=1-clamp(energy/CFG.stamina.lowThreshold,0,1);
-  return {movement:CFG.stamina.minimumMoveMultiplier+(1-CFG.stamina.minimumMoveMultiplier)*energy/CFG.stamina.full,pace:1-CFG.stamina.maximumPaceLoss*fatigue,scatter:CFG.stamina.maximumScatter*fatigue**CFG.stamina.scatterExponent};
+  const unstable=1-clamp(energy/CFG.stamina.stabilityThreshold,0,1);
+  return {movement:CFG.stamina.minimumMoveMultiplier+(1-CFG.stamina.minimumMoveMultiplier)*energy/CFG.stamina.full,pace:1-CFG.stamina.maximumPaceLoss*fatigue,scatter:CFG.stamina.maximumScatter*unstable**CFG.stamina.scatterExponent};
 }
 export function fatigueTarget(target,value,random=Math.random){
   const radius=Math.sqrt(random())*staminaEffects(value).scatter,angle=random()*Math.PI*2;

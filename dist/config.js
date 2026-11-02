@@ -14,8 +14,9 @@ export const CONFIG={
     lowThreshold:30, // 低于此绝对体力值开始降低球速和稳定性
     minimumMoveMultiplier:.45, // 零体力时移动速度倍率
     maximumPaceLoss:.3, // 零体力最大球速系数损失（30%）
-    maximumScatter:1.6, // 零体力落点偏移半径；不裁剪至场内
-    scatterExponent:2, // 疲劳与偏移强度的曲线指数
+    stabilityThreshold:60, // 低于此体力开始降低稳定性；球速惩罚仍使用 lowThreshold
+    maximumScatter:4.2, // 零体力落点偏移半径，米；允许出界
+    scatterExponent:1.2, // 稳定性衰减曲线；越小，中低体力的偏移越明显
     displayFallRate:3.8, // 体力条下降追赶速度；越大越快
     displayRiseRate:2.8, // 体力条恢复追赶速度；越小越慢
     displayTrailRate:1.7, // 金色残影追赶速度
@@ -55,6 +56,12 @@ export const CONFIG={
     landingHeight:.11, // 球落地时球心高度
     contactTolerance:.8, // 自动击球时角色到目标位置的最大距离
     backhandThreshold:-.1, // 相对来球横向位置的反手阈值
+    flatFirstServeYaw:1.2, // 平击一发横向角度误差上限，度
+    flatFirstServePitch:1.1, // 平击一发俯仰角度误差上限，度；在轨迹求解后施加，可能下网/出界
+    serveErrorPowerFactor:.012, // 高于基准力量时每一点增加的误差倍率
+    perfectServeErrorMultiplier:.35, // Perfect 降低一发误差，仍不保证进球
+    flatServeSpinThreshold:.25, // 上旋量达到此值后不使用平击一发额外误差
+    serveSpinErrorReduction:.5, // 侧旋对平击一发误差的最大减免比例
   },
   physics:{
     step:1/240, // 固定物理步长，秒
@@ -121,7 +128,7 @@ export const CONFIG={
     approachDepth:6,nearRecoveryDepth:8.6,deepRecoveryDepth:10.8, // 回位纵深选择
     fallbackOpponentDepth:10,recoveryWidth:2.8, // 无预测时对手纵深及回位横向限制
     predictionSteps:1680, // 来球预测最多模拟步数
-    rallyTimeout:7,escapeBoundary:18, // 无有效回球的超时时间/出场边界
+    rallyTimeout:7,escapeMargin:1, // 无有效回球超时/球超出缓冲区后额外判定距离
   },
   animation:{
     strokeDuration:1.05,serveDuration:1.35, // 正反手/发球动作总时长
@@ -137,19 +144,26 @@ export const CONFIG={
     strokeTrailStart:.3,strokeTrailEnd:.74,serveTrailStart:.5,serveTrailEnd:.88, // 拖尾时间范围
   },
   match:{gamesToWin:6,noAd:false,difficulty:'normal'}, // 菜单默认局数、金球制开关、难度
-  court:{halfWidth:4.5,halfLength:12,serviceDepth:6.4}, // 单打半宽/半长/发球区纵深，与绘制共用
+  court:{
+    halfWidth:4.115,halfLength:11.885,doublesHalfWidth:5.485,serviceDepth:6.4, // 标准单打8.23×23.77米、双打10.97×23.77米
+    runBack:6.4,sideRun:3.66, // ITF国际比赛建议最小缓冲区：底线后/双打边线外，米
+    playerBoundaryMargin:.35, // 球员站位距场地外缘的最小余量
+    lineWidth:.05, // 场线宽度，米
+    bufferColor:'#466b4d', // 缓冲区地面颜色
+    grassColors:['#719655','#789d5d'], // 场内草地条纹
+  },
   layout:{
     edge:12,top:16,bottom:34, // 桌面取景留白，像素
-    portraitTop:144,portraitRight:64,portraitBottom:34, // 竖屏为比分/操作区留白
-    landscapeLeft:194,landscapeRight:62,landscapeTop:12,landscapeBottom:22, // 横屏取景留白
+    portraitTop:112,portraitRight:12,portraitBottom:72, // 竖屏为紧凑比分/底部测速留白
+    landscapeLeft:148,landscapeRight:12,landscapeTop:12,landscapeBottom:22, // 横屏为紧凑计分板留白
     minimumWidth:100,minimumHeight:130,fallbackLeft:8,fallbackTop:12, // 极小窗口保护
     mobilePowerWidth:48,desktopPowerWidth:80, // 力量条区域宽度
     serveSize:248,shotWidth:290,shotHeight:265, // 手势控件设计尺寸，修改须同步 CSS/SVG
     gestureMobileRight:64,gestureDesktopRight:104,gestureLeft:8, // 手势边界留白
     serveTop:36,shotTop:18,gestureBottom:22, // 手势纵向留白
     gesturePowerWidth:52,gesturePowerHeight:204,gesturePowerGap:8, // 长按控件旁的力量条尺寸与间距，像素
-    floorSideMargin:2.7,floorDepthMargin:3.3, // 场地取景边界相对单打线的余量
-    playerSideMargin:1,playerDepthMargin:2.5,playerHeight:2.7, // 球员取景边界余量
+    floorSideMargin:.2,floorDepthMargin:.2, // 缓冲区外缘的额外取景余量
+    playerHeight:2.7, // 缓冲区内跑动球员取景高度
   },
   view:{
     fieldOfView:43, // 相机垂直视角

@@ -20,10 +20,10 @@ test('low energy slows movement and shots and increases bounded target error',()
  const full=staminaEffects(100),low=staminaEffects(15),empty=staminaEffects(0);
  assert.ok(full.movement>low.movement&&low.movement>empty.movement);
  assert.ok(full.pace>low.pace&&low.pace>empty.pace);
- assert.equal(staminaEffects(30).scatter,0);
+ assert.equal(staminaEffects(60).scatter,0);assert.ok(staminaEffects(30).scatter>1.8);
  const target={x:4.2,z:11.5};assert.deepEqual(fatigueTarget(target,100),target);
  const miss=fatigueTarget(target,0,()=>1);assert.ok(miss.x>4.67);
- assert.ok(Math.hypot(miss.x-target.x,miss.z-target.z)<=1.600001);
+ assert.ok(Math.hypot(miss.x-target.x,miss.z-target.z)<=4.200001);
  assert.deepEqual(target,{x:4.2,z:11.5});
 });
 test('new match clears exhaustion and caps',()=>{

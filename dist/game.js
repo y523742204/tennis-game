@@ -1,3 +1,5 @@
+import {courtDimensions,clampPlayerTarget} from './court.js';
+import {serveVelocityError} from './accuracy.js';
 import {solveShot,speedKmh} from './shot.js';
 import {TennisAudio} from './audio.js';
 import {CONFIG as CFG} from './config.js';
@@ -16,9 +18,23 @@ const camera=new THREE.PerspectiveCamera(CFG.view.fieldOfView,1,.1,100);camera.p
 const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,CFG.view.desktopPixelRatio));renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=CFG.view.exposure;arena.prepend(renderer.domElement);
 scene.add(new THREE.HemisphereLight(0xf5ffe2,0x34523e,2.5));const sun=new THREE.DirectionalLight(0xfff4d4,3);sun.position.set(-10,20,8);sun.castShadow=true;sun.shadow.normalBias=.025;sun.shadow.radius=4;sun.shadow.mapSize.set(2048,2048);Object.assign(sun.shadow.camera,{left:-16,right:16,top:18,bottom:-18});scene.add(sun);
 function box(w,h,d,color,x=0,y=0,z=0){const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),new THREE.MeshStandardMaterial({color,roughness:.85}));mesh.position.set(x,y,z);mesh.receiveShadow=true;scene.add(mesh);return mesh}
-box(14,.3,30,'#355d40',0,-.25);for(let i=0;i<12;i++)box(12,.02,2,i%2?'#719655':'#789d5d',0,-.08,-11+i*2);
-function line(x,z,w,d){box(w,.025,d,'#e8ebcd',x,-.045,z)}for(const x of [-6,-CFG.court.halfWidth,CFG.court.halfWidth,6])line(x,0,.055,CFG.court.halfLength*2);for(const z of [-CFG.court.halfLength,CFG.court.halfLength])line(0,z,12,.06);for(const z of [-CFG.court.serviceDepth,CFG.court.serviceDepth])line(0,z,CFG.court.halfWidth*2,.06);line(0,0,.055,CFG.court.serviceDepth*2);
-for(let i=0;i<=40;i++)box(.018,1.05,.018,'#c9d1bd',-6.4+i*.32,.5,0);for(let i=0;i<8;i++)box(12.8,.018,.018,'#a5b69c',0,i*.14,0);box(13,.08,.06,'#f4f0d8',0,1.1);for(const x of [-6.5,6.5])box(.12,1.4,.12,'#dde2ca',x,.6);
+const courtSize=courtDimensions(),court=CFG.court;
+box(courtSize.width,.3,courtSize.length,court.bufferColor,0,-.25);
+box(courtSize.width,.02,courtSize.length,court.bufferColor,0,-.08);
+const stripeDepth=court.halfLength*2/12;
+for(let i=0;i<12;i++)box(court.doublesHalfWidth*2,.02,stripeDepth,court.grassColors[i%2],0,-.08,-court.halfLength+(i+.5)*stripeDepth);
+function line(x,z,w,d){box(w,.025,d,'#e8ebcd',x,-.045,z)}
+for(const x of [-court.doublesHalfWidth,-court.halfWidth,court.halfWidth,court.doublesHalfWidth])line(x,0,court.lineWidth,court.halfLength*2);
+for(const z of [-court.halfLength,court.halfLength]){line(0,z,court.doublesHalfWidth*2,court.lineWidth);line(0,z-Math.sign(z)*.1,court.lineWidth,.2)}
+for(const z of [-court.serviceDepth,court.serviceDepth])line(0,z,court.halfWidth*2,court.lineWidth);
+line(0,0,court.lineWidth,court.serviceDepth*2);
+// 外缘为深绿色边沿，完整保留标准跑动缓冲区。
+for(const x of [-courtSize.halfWidth,courtSize.halfWidth])box(.1,.08,courtSize.length,'#284a36',x,-.02);
+for(const z of [-courtSize.halfLength,courtSize.halfLength])box(courtSize.width,.08,.1,'#284a36',0,-.02,z);
+const netHalfWidth=court.doublesHalfWidth+.914;
+for(let i=0;i<=40;i++)box(.018,1.05,.018,'#c9d1bd',-netHalfWidth+i*netHalfWidth*2/40,.5,0);
+for(let i=0;i<8;i++)box(netHalfWidth*2,.018,.018,'#a5b69c',0,i*.14,0);
+box(netHalfWidth*2,.08,.06,'#f4f0d8',0,1.1);for(const x of [-netHalfWidth,netHalfWidth])box(.12,1.4,.12,'#dde2ca',x,.6);
 const human=createPlayer(scene,CFG.view.humanColor,10.5,CFG.view.humanAccent),cpu=createPlayer(scene,CFG.view.cpuColor,-10.5,CFG.view.cpuAccent);const ball=new THREE.Mesh(new THREE.SphereGeometry(CFG.physics.ballRadius,16,16),new THREE.MeshStandardMaterial({color:'#e2f76a',emissive:'#687a16',emissiveIntensity:.3}));ball.castShadow=true;scene.add(ball);for(const axis of [0,Math.PI/2]){const seam=new THREE.Mesh(new THREE.TorusGeometry(CFG.physics.ballRadius+.001,.006,5,36),new THREE.MeshStandardMaterial({color:'#fbffe5',roughness:.8}));seam.rotation.x=axis;ball.add(seam);}
 const textureCanvas=document.createElement('canvas');textureCanvas.width=textureCanvas.height=256;const ctx=textureCanvas.getContext('2d');ctx.fillStyle='#eee';ctx.fillRect(0,0,256,256);for(let i=0;i<8000;i++){const shade=170+Math.random()*80;ctx.fillStyle='rgb('+shade+','+shade+','+shade+')';ctx.fillRect(Math.random()*256,Math.random()*256,1,3)}const grassTexture=new THREE.CanvasTexture(textureCanvas);grassTexture.wrapS=grassTexture.wrapT=THREE.RepeatWrapping;grassTexture.repeat.set(5,2);grassTexture.anisotropy=renderer.capabilities.getMaxAnisotropy();scene.traverse(o=>{if(o.isMesh&&o.position.y===-.08){o.material.map=grassTexture;o.material.bumpMap=grassTexture;o.material.bumpScale=.03}});
 const shadow=new THREE.Mesh(new THREE.CircleGeometry(.26,24),new THREE.MeshBasicMaterial({color:'#112c1a',transparent:true,opacity:.25,depthWrite:false}));shadow.rotation.x=-Math.PI/2;scene.add(shadow);
@@ -26,7 +42,7 @@ const world=new C.World({gravity:new C.Vec3(0,-CFG.physics.gravity,0)});world.so
 const felt=new C.Material(),grass=new C.Material(),netMat=new C.Material();
 world.addContactMaterial(new C.ContactMaterial(felt,grass,{friction:CFG.physics.grassFriction,restitution:CFG.physics.grassRestitution}));world.addContactMaterial(new C.ContactMaterial(felt,netMat,{friction:CFG.physics.netFriction,restitution:CFG.physics.netRestitution}));
 const floor=new C.Body({mass:0,material:grass,shape:new C.Plane()});floor.quaternion.setFromEuler(-Math.PI/2,0,0);floor.position.y=-.06;world.addBody(floor);
-const netBody=new C.Body({mass:0,material:netMat,shape:new C.Box(new C.Vec3(6.5,.55,.035)),position:new C.Vec3(0,.5,0)});world.addBody(netBody);
+const netBody=new C.Body({mass:0,material:netMat,shape:new C.Box(new C.Vec3(netHalfWidth,.55,.035)),position:new C.Vec3(0,.5,0)});world.addBody(netBody);
 const physicalBall=new C.Body({mass:CFG.physics.ballMass,material:felt,shape:new C.Sphere(CFG.physics.ballRadius),linearDamping:0,angularDamping:CFG.physics.angularDamping});world.addBody(physicalBall);
 
 
@@ -126,20 +142,21 @@ function ui(){
  const labels=match.labels();for(let i=0;i<2;i++){$('sets'+i).textContent=match.sets[i];$('games'+i).textContent=match.games[i];$('points'+i).textContent=labels[i];$('server'+i).style.visibility=match.server===i?'visible':'hidden'}
  $('courtMenu').hidden=!started||!$('startMenu').hidden||!$('sideMenu').hidden;
  $('pointHeading').textContent=match.tieBreak?'TB':'分';
- $('scoreStatus').textContent=match.winner!==null?'比赛结束':match.tieBreak?'TIEBREAK / 抢七':match.decidingPoint?'GOLDEN POINT':match.points.every(p=>p>=3)?(match.points[0]===match.points[1]?'DEUCE / 平分':'ADVANTAGE / 占先'):'SET 1';
- $('serviceStatus').textContent=(match.tieBreak?'抢七':'第 '+(match.games[0]+match.games[1]+1)+' 局')+' · '+(match.server===0?'你':'电脑')+'发球 · '+(match.serviceSide===0?'一区 / 右区':'二区 / 左区')+(isServe?' · '+(serveAttempt===1?'一发':'二发')+(phase==='choose'?' · 长按旋转圆盘':''):'');
- if(choosingReturn())$('serviceStatus').textContent+=' · '+(returnStrategy.locked?'已锁定 '+({top:'上旋',flat:'平击',slice:'切削'}[returnStrategy.locked.type])+' '+returnStrategy.locked.power+'%':lastHitter===0?'已出球 · 可预选下一拍':'来球中 · 长按预选');
- if(paused&&$('startMenu').hidden)$('serviceStatus').textContent='已暂停 · 点击球场或 P 继续 / Esc 设置';
- else if(phase==='point')$('serviceStatus').textContent+=' · 点击球场继续';
- else if(phase==='fault')$('serviceStatus').textContent+=' · 发球失误 / 擦网，点击重发';
- else if(phase==='end')$('serviceStatus').textContent=(match.winner===0?'你赢得本盘':'电脑赢得本盘')+' · 点击球场开始新比赛';
+ $('scoreStatus').textContent=match.winner!==null?'比赛结束':match.tieBreak?'抢七':match.decidingPoint?'金球':match.points.every(p=>p>=3)?(match.points[0]===match.points[1]?'平分':'占先'):'第 '+(match.games[0]+match.games[1]+1)+' 局';
+ let status=(match.server===0?'你':'电脑')+'发球 · '+(serveAttempt===1?'一发':'二发')+' · '+(match.serviceSide===0?'右区':'左区');
+ if(choosingReturn())status=returnStrategy.locked?'已锁定 · '+({top:'上旋',flat:'平击',slice:'切削'}[returnStrategy.locked.type]):'长按预选下一拍';
+ if(paused)status='暂停 · 点击继续';
+ else if(phase==='point')status='本分结束 · 点击继续';
+ else if(phase==='fault')status='发球重试 · 点击继续';
+ else if(phase==='end')status=match.winner===0?'你赢了 · 点击重开':'电脑获胜 · 点击重开';
+ $('serviceStatus').textContent=status;
  serviceBox.visible=started&&isServe&&!['menu','end','side'].includes(phase);if(serviceBox.visible){const sign=-ends[match.server]*(match.serviceSide===0?1:-1);serviceBox.position.set(sign*CFG.court.halfWidth/2,-.025,-ends[match.server]*CFG.court.serviceDepth/2)}
 }
 function forces(body){const f=aerodynamicForce(body.velocity,body.angularVelocity);body.applyForce(new C.Vec3(f.x,f.y,f.z))}
 function simulation({floorEnabled=false,netEnabled=false,origin=null}={}){
  const w=new C.World({gravity:new C.Vec3(0,-CFG.physics.gravity,0)});w.solver.iterations=CFG.physics.solverIterations;for(const cm of world.contactmaterials)w.addContactMaterial(cm);
  let ground=null;if(floorEnabled){ground=new C.Body({mass:0,material:grass,shape:new C.Plane()});ground.quaternion.copy(floor.quaternion);ground.position.copy(floor.position);w.addBody(ground)}
- if(netEnabled)w.addBody(new C.Body({mass:0,material:netMat,shape:new C.Box(new C.Vec3(6.5,.55,.035)),position:new C.Vec3(0,.5,0)}));
+ if(netEnabled)w.addBody(new C.Body({mass:0,material:netMat,shape:new C.Box(new C.Vec3(netHalfWidth,.55,.035)),position:new C.Vec3(0,.5,0)}));
  const b=new C.Body({mass:CFG.physics.ballMass,material:felt,shape:new C.Sphere(CFG.physics.ballRadius),linearDamping:0,angularDamping:CFG.physics.angularDamping});b.position.copy(origin||physicalBall.position);b.velocity.copy(physicalBall.velocity);b.angularVelocity.copy(physicalBall.angularVelocity);w.addBody(b);return {w,b,ground};
 }
 function trajectory(who,type,target,power,perfect=false,pad=null,origin=null){
@@ -165,7 +182,7 @@ function predict(){
  return contact?{...contact,receiver}:null;
 }
 function movePlayerTo(who,target,dt,speedFactor=1){
- if(!target)return true;const p=players[who].position,dx=target.x-p.x,dz=target.z-p.z,distance=Math.hypot(dx,dz);
+ if(!target)return true;target=clampPlayerTarget(target);const p=players[who].position,dx=target.x-p.x,dz=target.z-p.z,distance=Math.hypot(dx,dz);
  const move=Math.min(distance,runSpeed(who)*speedFactor*dt);if(distance>.001){p.x+=dx/distance*move;p.z+=dz/distance*move;energy.spend(who,move*CFG.stamina.runCostPerMeter)}return distance-move<CFG.movement.arrivalTolerance;
 }
 function recoverPlayers(dt,excluded=null){
@@ -183,8 +200,8 @@ function prepareServe(){
   match.sideOverride=Math.random()<.5?0:1;
  }
  const server=match.server,receiver=1-server,sign=ends[server]*(match.serviceSide===0?1:-1);
- players[server].position.set(sign*2,0,ends[server]*12.65);players[receiver].position.set(-sign*2.2,0,ends[receiver]*CFG.shot.receiverDepth);
- physicalBall.position.set(players[server].position.x,CFG.shot.serveContactHeight,ends[server]*12.25);physicalBall.velocity.setZero();physicalBall.angularVelocity.setZero();physicalBall.force.setZero();physicalBall.torque.setZero();lastHitter=server;
+ players[server].position.set(sign*2,0,ends[server]*(CFG.court.halfLength+.65));players[receiver].position.set(-sign*2.2,0,ends[receiver]*CFG.shot.receiverDepth);
+ physicalBall.position.set(players[server].position.x,CFG.shot.serveContactHeight,ends[server]*(CFG.court.halfLength+.25));physicalBall.velocity.setZero();physicalBall.angularVelocity.setZero();physicalBall.force.setZero();physicalBall.torque.setZero();lastHitter=server;
  aim={x:-sign*2,z:-ends[server]*CFG.shot.serveTargetDepth};dirty=true;phase=server===0?'choose':'ai';aiWait=CFG.ai.serveWait;
  say(server===0?(serveAttempt===1?(match.serviceSide===0?'一区':'二区')+'发球 · 长按，瞄准高亮斜对角发球区':'二发机会 · 再次失误将失分'):'电脑'+(serveAttempt===2?'二发':'发球')+' · '+(match.serviceSide===0?'一区':'二区'));ui();
 }
@@ -229,7 +246,7 @@ function launchStroke(who,type,power,perfect=false,pad=null,returnChoice=null){
  let target=who===0?{...(returnChoice?.target||aim)}:serving?{x:-sign*(CFG.ai.serveXMin+Math.random()*CFG.ai.serveXRange),z:-ends[who]*(CFG.ai.serveDepthMin+Math.random()*CFG.ai.serveDepthRange)}:{x:(Math.random()-.5)*CFG.ai.returnWidth,z:-ends[who]*(CFG.ai.returnDepthMin+Math.random()*CFG.ai.returnDepthRange)};
  if(who===0&&!perfect){target.x+=(Math.random()-.5)*Math.abs((returnChoice?.gauge??gauge)-.5)*CFG.shot.timingScatter;target.z+=(power-CFG.shot.neutralPower)*CFG.shot.powerDepthOffset}
  target=fatigueTarget(target,stamina[who]);
- const shot=trajectory(who,type,target,power,perfect,pad);physicalBall.velocity.copy(shot.v);physicalBall.angularVelocity.set(shot.spin.x,shot.spin.y,shot.spin.z);physicalBall.force.setZero();physicalBall.torque.setZero();
+ const shot=trajectory(who,type,target,power,perfect,pad);physicalBall.velocity.copy(serveVelocityError(shot.v,{serving,attempt:serveAttempt,type,pad,power,perfect}));physicalBall.angularVelocity.set(shot.spin.x,shot.spin.y,shot.spin.z);physicalBall.force.setZero();physicalBall.torque.setZero();
  showShotSpeed(who,type,serving,perfect,physicalBall.velocity);
  sounds.hit({type,serving,perfect,speed:speedKmh(physicalBall.velocity)});
  energy.spend(who,cost(power,type)*(perfect?CFG.stamina.perfectCostMultiplier:1));lastHitter=who;bounces=0;decision=null;netTouched=false;elapsed=0;acc=0;phase='flight';plan=predict();
@@ -275,7 +292,7 @@ function step(dt){
    plan=null;contactGuide.visible=false;clearReturn();cancelHold();
   }
  }
- if(elapsed>CFG.tactics.rallyTimeout||Math.abs(physicalBall.position.x)>CFG.tactics.escapeBoundary||Math.abs(physicalBall.position.z)>CFG.tactics.escapeBoundary){if(isServe)serviceFault('发球未能有效过网');else finishPoint(bounces?lastHitter:1-lastHitter,bounces?'未能回球':'击球出界')}
+ if(elapsed>CFG.tactics.rallyTimeout||Math.abs(physicalBall.position.x)>courtSize.halfWidth+CFG.tactics.escapeMargin||Math.abs(physicalBall.position.z)>courtSize.halfLength+CFG.tactics.escapeMargin){if(isServe)serviceFault('发球未能有效过网');else finishPoint(bounces?lastHitter:1-lastHitter,bounces?'未能回球':'击球出界')}
 }
 function cancelHold(){const previous=hold;hold=null;if(previous){clearTimeout(previous.timer);if(previous.surface.hasPointerCapture(previous.id))previous.surface.releasePointerCapture(previous.id)}wheel.hidden=true;$('serveDial').hidden=true;$('powerPanel').hidden=true;}
 function updateServeDial(){
@@ -312,7 +329,7 @@ for(const surface of [canvas]){surface.addEventListener('pointerdown',beginHold)
 const ray=new THREE.Raycaster(),groundPlane=new THREE.Plane(new THREE.Vector3(0,1,0),0),intersection=new THREE.Vector3();
 function aimAt(e,whilePress=false){if(!ready()||(hold&&!whilePress))return;const r=canvas.getBoundingClientRect();ray.setFromCamera(new THREE.Vector2((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1),camera);if(!ray.ray.intersectPlane(groundPlane,intersection))return;
  if(servingInput()){const sign=-ends[match.server]*(match.serviceSide===0?1:-1);aim={x:sign*THREE.MathUtils.clamp(intersection.x*sign,CFG.shot.aimLineMargin,CFG.court.halfWidth-CFG.shot.aimLineMargin),z:-ends[0]*THREE.MathUtils.clamp(-intersection.z*ends[0],1,CFG.court.serviceDepth-CFG.shot.aimLineMargin)}}
- else aim={x:THREE.MathUtils.clamp(intersection.x,-4.2,4.2),z:-ends[0]*THREE.MathUtils.clamp(-intersection.z*ends[0],2,11.5)};dirty=true;
+ else aim={x:THREE.MathUtils.clamp(intersection.x,-CFG.court.halfWidth+CFG.shot.aimLineMargin,CFG.court.halfWidth-CFG.shot.aimLineMargin),z:-ends[0]*THREE.MathUtils.clamp(-intersection.z*ends[0],2,CFG.court.halfLength-CFG.shot.aimLineMargin)};dirty=true;
 }
 canvas.addEventListener('pointermove',e=>aimAt(e));
 function updateVisuals(now,dt){

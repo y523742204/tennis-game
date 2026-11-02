@@ -1,4 +1,5 @@
 import {CONFIG as CFG} from './config.js';
+import {insidePlayerArea} from './court.js';
 const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
 export const WAIST_HEIGHT=CFG.tactics.waistHeight;
 export function travelTime(distance,speed,stamina=CFG.stamina.full) {
@@ -18,6 +19,7 @@ export function selectContact(samples,{position,end,speed,stamina=CFG.stamina.fu
     // Stand behind and beside the ball: leave racket space on either wing.
     const stances=[{x:ball.x-CFG.tactics.stanceSide*end,z:ball.z+CFG.tactics.stanceBehind*end,backhand:false},{x:ball.x+CFG.tactics.stanceSide*end,z:ball.z+CFG.tactics.stanceBehind*end,backhand:true}];
     for(const stance of stances){
+      if(!insidePlayerArea(stance))continue;
       const distance=Math.hypot(stance.x-position.x,stance.z-position.z);
       const setup=ball.time-travelTime(distance,speed,stamina);
       candidates.push({...stance,time:ball.time,ball,landing:ball.landing,distance,extension,setup,

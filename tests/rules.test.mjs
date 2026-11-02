@@ -6,7 +6,8 @@ test('serve must land in diagonal box, including after changing ends',()=>{
  assert.ok(validServiceLanding(-2,-4,1,0));assert.ok(validServiceLanding(2,-4,1,1));
  assert.ok(validServiceLanding(2,4,-1,0));assert.ok(validServiceLanding(-2,4,-1,1));
  assert.equal(validServiceLanding(2,-4,1,0),false);assert.equal(validServiceLanding(-2,-7,1,0),false);
- assert.equal(validServiceLanding(-2,4,1,0),false);assert.ok(validServiceLanding(-4.55,-5.55,1,0));
+ assert.equal(validServiceLanding(-2,4,1,0),false);assert.ok(validServiceLanding(-4.2,-6.45,1,0));
+ assert.equal(validServiceLanding(-4.4,-6,1,0),false);
 });
 test('standard scoring, sides and game service rotation',()=>{
  const m=new TennisMatch();assert.equal(m.server,0);assert.equal(m.serviceSide,0);

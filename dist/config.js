@@ -33,17 +33,25 @@ export const CONFIG={
     arrivalTolerance:.025, // 判定到达移动目标的距离
   },
   shot:{
-    pace:{flat:17,top:12,slice:13.5}, // 各球路的基础水平速度参数
-    servePace:18, // 发球基础速度参数
-    serveTopLoss:3, // 满上旋发球的速度损失
-    serveSideLoss:1.5, // 满侧旋发球的速度损失
-    minimumFlightTime:.8, // 最短飞行时间
+    speedKmh:{flat:120,top:115,slice:100}, // 满体力、基准力量下的回球出拍速度，km/h
+    serveSpeedKmh:180, // 满体力、基准力量的平击发球出拍速度，km/h
+    serveTopLossKmh:20, // 满上旋发球速度损失，km/h
+    serveSideLossKmh:10, // 满侧旋发球速度损失，km/h
+    minimumFlightTime:.12,maximumFlightTime:3, // 轨迹求解允许的时间范围，模拟秒
     neutralPower:65, // 默认力量，也是速度与落点纵向修正的基准
-    powerTimeFactor:.002, // 力量对飞行时间的影响
-    perfectSpeed:1.1, // Perfect 球速倍率
+    powerSpeedFactor:.002, // 力量每高于基准一点的速度增益比例
+    perfectSpeed:1.25, // Perfect 暴力击球倍率：标准发球约225、平击回球约150 km/h
+    perfectDipSpin:220, // Perfect 平击/上旋回球附加上旋，rad/s；让高速球过网后快速下坠
     timingScatter:2.4, // 非 Perfect 的操作误差系数
     powerDepthOffset:.022, // 力量每偏离基准一点的纵向落点偏移
     solverPasses:5, // 轨迹落点迭代次数；越大越耗性能
+    speedPasses:6, // 匹配指定出球速度的迭代次数
+    netClearance:.01, // 球心过网的额外余量；短球/低球会自动降速抬高弧线
+    netTop:1.05, // 物理球网顶部高度，与网碰撞体一致
+    serveContactHeight:3.5, // 卡通球员伸臂发球的球心高度
+    serveTargetDepth:6, // 默认发球目标纵深，接近发球线
+    receiverDepth:12.4, // 接发站位纵深，基线附近
+    aimLineMargin:.3, // 瞄准点距边线/发球线的余量
     landingHeight:.11, // 球落地时球心高度
     contactTolerance:.8, // 自动击球时角色到目标位置的最大距离
     backhandThreshold:-.1, // 相对来球横向位置的反手阈值
@@ -62,7 +70,7 @@ export const CONFIG={
     netRestitution:.1, // 球网反弹系数
     angularDamping:.2, // 旋转衰减
     drag:.00065, // 空气阻力系数
-    magnus:.000018, // 旋转产生侧向力的系数
+    magnus:.00006, // 旋转产生侧向力的系数
     topSpin:38, // 上旋角速度
     sliceSpin:-28, // 切削角速度
     serveTopSpin:64, // 发球最大上旋角速度
@@ -86,7 +94,7 @@ export const CONFIG={
     serveSideRange:1.4, // 发球左右旋随机范围
     secondServeTop:.65,firstServeTopRange:.45, // 二发上旋、一发上旋范围
     serveXMin:1.4,serveXRange:1.8, // 发球目标横向距离及随机范围
-    serveDepthMin:3.5,serveDepthRange:1.3, // 发球目标纵深及随机范围
+    serveDepthMin:5.7,serveDepthRange:.4, // 发球目标纵深及随机范围，避免浅发球
     returnWidth:7,returnDepthMin:6,returnDepthRange:4, // 回球落点范围
   },
   tactics:{
@@ -118,7 +126,7 @@ export const CONFIG={
     strokeTrailStart:.3,strokeTrailEnd:.74,serveTrailStart:.5,serveTrailEnd:.88, // 拖尾时间范围
   },
   match:{gamesToWin:6,noAd:false,difficulty:'normal'}, // 菜单默认局数、金球制开关、难度
-  court:{halfWidth:4.5,halfLength:12,serviceDepth:5.5}, // 单打半宽/半长/发球区纵深，与绘制共用
+  court:{halfWidth:4.5,halfLength:12,serviceDepth:6.4}, // 单打半宽/半长/发球区纵深，与绘制共用
   layout:{
     edge:12,top:16,bottom:34, // 桌面取景留白，像素
     portraitTop:144,portraitRight:64,portraitBottom:34, // 竖屏为比分/操作区留白

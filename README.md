@@ -32,6 +32,7 @@ npm start
 - `P` 暂停或继续；`Esc` 打开比赛设置；点击球场或空格进入下一分。
 - 发球节奏保持原样，回球飞行时间倍率降为 0.52，给预选操作更多时间；真实模拟球速和落点规则不变。
 - 本地合成击球、Perfect、弹地、触网、得分音效；首次点击或按键后启用，可在比赛设置关闭。
+- 挥拍采用参考真实技术顺序的程序化骨骼动画：正手整体转身、转髋带肩、低到高挥拍与跨身随挥；单反展开手臂并用另一手平衡；截击短引拍；发球和高压包含屈膝、拍头下沉、伸臂和随挥。连续插值避免关键帧间逐段停顿，击球时配合重心转移、站距变化和目光保持。此实现是手工建模的动作，不是动作捕捉数据。
 
 ## 手机与平板
 
@@ -59,6 +60,7 @@ npm test
 
 - `dist/`：可直接部署的静态网站。
 - `dist/player.js`：卡通球员和关节动画。
+- `dist/stroke-motion.js`：连续挥拍插值与分阶段发球动作；姿态及时间参数仍集中在 `config.js`。
 - `dist/flight.js`：旋转与空气作用力。
 - `dist/tactics.js`：截击、高压、弹跳后击球点与回位。
 - `dist/return-strategy.js`：来球预选、锁定及到点执行。
@@ -90,6 +92,8 @@ npm test
 体力条总刻度固定为 `stamina.full`（默认 100）。可恢复容量为 90 时，补满显示 **90/100**，右侧 10% 为灰色死区；每分结束真实体力补满，但显示值缓慢追赶。调小 `displayRiseRate` 会让恢复动画更慢。
 
 正反手关键帧比例必须满足 `0 < coil < drive < contact < finish < recover < 1`；动作时长、模拟步长和体力总刻度应大于 0。`capRetention` 应在 (0,1]，`minimumMoveMultiplier` 应在 (0,1]。默认菜单局数对应 2/4/6。手势控件设计尺寸与 HTML/CSS/SVG 对齐，修改尺寸时也需要同步布局样式。角色网格拓扑、装饰几何和标准网球计分算法保留在各自实现文件中。
+
+动作调参：`animation.strokeDamping` 控制挥拍跟随速度，`strideDuringStroke` 控制击球时跑动摆幅，`weightDepth/stanceWidth` 控制重心与站距，`serveTrophy/serveDrop/serveFinish` 控制发球阶段（保持 `0 < serveTrophy < serveDrop < serveContact < serveFinish < 1`）。动作设计参考 [USTA 正手整体转身教学](https://www.usta.com/en/home/improve/tips-and-instruction/national/improve-your-tennis-game--get-your-forehand-flowing.html)；所有角度为当前卡通骨骼上的手工适配值。
 
 `dist/index.html` 的 import map 为本地模块统一添加缓存版本。部署新代码时应更新其中的版本后缀及入口脚本后缀，避免浏览器混用新旧模块。
 

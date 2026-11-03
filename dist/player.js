@@ -1,6 +1,7 @@
-import {CONFIG as CFG,READY_POSE,strokePoses} from './config.js';
+import {strokePose} from './stroke-motion.js';
+import {CONFIG as CFG,READY_POSE} from './config.js';
 import * as THREE from './vendor/three.module.js';
-const smooth=t=>t*t*(3-2*t),mix=THREE.MathUtils.lerp;
+const mix=THREE.MathUtils.lerp;
 export function createPlayer(scene,color,z,accent) {
   const root=new THREE.Group();root.position.z=z;scene.add(root);
   const mat=c=>new THREE.MeshStandardMaterial({color:c,roughness:.7});
@@ -43,30 +44,6 @@ export function createPlayer(scene,color,z,accent) {
   return root;
 }
 const READY=READY_POSE;
-function blendPose(a,b,t){
-  const result={};
-  for(const key of new Set([...Object.keys(a),...Object.keys(b)])){
-    const av=a[key]??0,bv=b[key]??0;
-    result[key]=Array.isArray(av)?av.map((v,i)=>mix(v,bv[i],t)):mix(av,bv,t);
-  }
-  return result;
-}
-function pose(type,backhand,serve,u,pad={x:0,y:0}){
-  const side=backhand?-1:1,wind=1-smooth(Math.min(u/CFG.animation.contact,1)),follow=smooth(Math.max(0,(u-CFG.animation.contact)/(1-CFG.animation.contact)));
-  if(serve){
-    const reach=Math.sin(Math.min(u/CFG.animation.serveContact,1)*Math.PI/2),recover=smooth(Math.max(0,(u-CFG.animation.serveContact)/(1-CFG.animation.serveContact)));
-    return {right:[mix(.5,2.6,reach)-recover*1.8, mix(-.65,.15,reach),-.2-recover*.4],left:[3.0*(1-recover),0,.2],elbowR:mix(1.8,.08,reach)+recover*.6,elbowL:.12+recover*.5,wrist:[-.15-pad.y*.35, .2+pad.x*reach*.85,pad.x*.2],yaw:-.4*wind+.45*follow+pad.x*.18,pitch:-.2*wind+.23*follow,bend:.4*wind};
-  }
-  // Coil, drive, contact, finish, recover. Hips lead the shoulders;
-  // the free arm opens out for balance on a one-handed backhand.
-  const {coil,drive,contactPose,finish}=strokePoses(type,backhand);
-  const frames=[[0,READY],[CFG.animation.coil,coil],[CFG.animation.drive,drive],[CFG.animation.contact,contactPose],[CFG.animation.finish,finish],[CFG.animation.recover,finish],[1,READY]];
-  for(let i=1;i<frames.length;i++)if(u<=frames[i][0]){
-    const [start,a]=frames[i-1],[end,b]=frames[i];
-    return blendPose(a,b,smooth(THREE.MathUtils.clamp((u-start)/(end-start),0,1)));
-  }
-  return READY;
-}
 export function beginStroke(player,{type='flat',backhand=false,serve=false,pad={x:0,y:0}}={}){
   const rig=player.userData.rig;rig.swing={type,backhand,serve,pad,time:0,duration:serve?CFG.animation.serveDuration:CFG.animation.strokeDuration,contact:serve?CFG.animation.serveContact:CFG.animation.contact,hit:false};rig.trailPoints=[];
 }
@@ -81,23 +58,26 @@ export function updatePlayer(player,dt,{end=1,moving=false,serveReady=false,read
   r.gait+=dt*(CFG.animation.gaitBase+stride*CFG.animation.gaitSpeed)*Math.min(1,stride*CFG.animation.gaitFade);
   player.rotation.y=end===1?0:Math.PI;
   let p={...READY},contact=false,s=r.swing;
-  if(s&&!paused){s.time+=dt;const u=Math.min(s.time/s.duration,1);p=pose(s.type,s.backhand,s.serve,u,s.pad);
+  if(s&&!paused){s.time+=dt;const u=Math.min(s.time/s.duration,1);p=strokePose(s.type,s.backhand,s.serve,u,s.pad);
     if(!s.hit&&u>=s.contact){s.hit=true;contact=true}
     if(u>=1)r.swing=null;
-  }else if(s){p=pose(s.type,s.backhand,s.serve,Math.min(s.time/s.duration,1),s.pad)}
+  }else if(s){p=strokePose(s.type,s.backhand,s.serve,Math.min(s.time/s.duration,1),s.pad)}
   else if(serveReady){p={...READY,right:[.3,-.5,-.45],left:[1.15,0,.15],elbowR:1.4,elbowL:.1,yaw:-.25,bend:.16}}
-  const gait=Math.sin(r.gait)*stride,hop=(1-Math.cos(r.gait*2))*CFG.animation.hop*stride+Math.sin(r.clock*2)*CFG.animation.idleHop*(1-stride);
+  const gait=Math.sin(r.gait)*stride*(s?CFG.animation.strideDuringStroke:1),hop=(1-Math.cos(r.gait*2))*CFG.animation.hop*stride+Math.sin(r.clock*2)*CFG.animation.idleHop*(1-stride);
   if(running&&!s){p={...p,right:[1.0+gait*.5,-.15,-.3],left:[.8-gait*.5,.15,.3],pitch:.16,yaw:gait*.08}}
-  const damp=1-Math.exp(-dt*CFG.animation.jointDamping),rot=(object,values)=>{for(let i=0;i<3;i++){const axis=['x','y','z'][i];object.rotation[axis]=mix(object.rotation[axis],values[i],damp)}};
-  r.body.position.y=mix(r.body.position.y,hop-(p.bend||0)*.14+(s?.serve?Math.sin(Math.PI*THREE.MathUtils.clamp((s.time/s.duration-.35)/.55,0,1))*.16:0),damp);
+  const damp=1-Math.exp(-dt*(s?CFG.animation.strokeDamping:CFG.animation.jointDamping)),rot=(object,values)=>{for(let i=0;i<3;i++){const axis=['x','y','z'][i];object.rotation[axis]=mix(object.rotation[axis],values[i],damp)}};
+  r.body.position.y=mix(r.body.position.y,hop-(p.bend||0)*.14+(p.lift||0),damp);
   r.body.position.x=mix(r.body.position.x,(p.weight||0)+gait*.018,damp);
-  rot(r.body,[forward*.07,0,-lateral*.1+gait*.025]);
+  r.body.position.z=mix(r.body.position.z,-(p.transfer||0)*CFG.animation.weightDepth,damp);
+  rot(r.body,[forward*.07,0,-lateral*.1+gait*.025+(p.roll||0)]);
   rot(r.hips,[0,(p.hipYaw||0)-gait*.06,0]);
-  rot(r.chest,[p.pitch||0,p.yaw||0,0]);r.head.rotation.y=mix(r.head.rotation.y,-(p.yaw||0)*.5,damp);
+  rot(r.chest,[p.pitch||0,p.yaw||0,0]);r.head.rotation.y=mix(r.head.rotation.y,-(p.yaw||0)*(s&&s.time/s.duration<s.contact+CFG.animation.contactHold?1:.5),damp);
   rot(r.rightArm.shoulder,p.right);rot(r.leftArm.shoulder,p.left);rot(r.rightArm.hand,p.wrist||[0,0,0]);
   r.rightArm.elbow.rotation.x=mix(r.rightArm.elbow.rotation.x,p.elbowR,damp);r.leftArm.elbow.rotation.x=mix(r.leftArm.elbow.rotation.x,p.elbowL,damp);
   for(const [leg,sign] of [[r.leftLeg,1],[r.rightLeg,-1]]){
-    const step=gait*sign,bend=p.bend||0;
+    const step=gait*sign,bend=p.bend||0,transfer=p.transfer||0;
+    leg.hip.position.x=mix(leg.hip.position.x,sign*(-.16-(s?CFG.animation.stanceWidth:0)),damp);
+    leg.hip.position.z=mix(leg.hip.position.z,sign*transfer*CFG.animation.weightDepth,damp);
     rot(leg.hip,[step*(.18+Math.abs(forward)*.5)-bend*.5,(p.hipYaw||0)*.5,sign*.09+step*lateral*.45]);
     rot(leg.knee,[Math.max(0,-step)*.85+bend,0,0]);
   }

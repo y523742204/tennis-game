@@ -140,6 +140,11 @@ export const CONFIG={
     contact:.42,serveContact:.72, // 击球在动作时间中的比例
     coil:.22,drive:.32,finish:.64,recover:.76, // 引拍/发力/随挥/回位关键帧比例
     jointDamping:18,velocityDamping:10, // 关节与速度变化的平滑系数
+    strokeDamping:32, // 挥拍时关节跟随速度，减少触球瞬间滞后
+    strideDuringStroke:.22, // 挥拍过程中保留的跑动幅度，避免击球时腿部仍大幅摆动
+    weightDepth:.18,stanceWidth:.1, // 击球重心前后转移、站距加宽（米）
+    serveTrophy:.34,serveDrop:.57,serveFinish:.86, // 发球奖杯姿势、拍头下沉、随挥关键时刻
+    contactHold:.08, // 转头视线在触球后保持的动作比例
     fullStrideSpeed:5, // 达到完整步幅的速度
     gaitBase:7,gaitSpeed:10,gaitFade:4, // 步频基础值/速度增量/低速淡出
     teleportDistance:1, // 单帧移动超过该值视为换位，不播放跑动
@@ -192,28 +197,38 @@ export const CONFIG={
 // 关节姿态配置：right/left/wrist 为 [X,Y,Z] 弧度；elbow 为屈肘角，
 // yaw/hipYaw 为转肩/转髋，pitch 为前倾，bend 为屈膝，weight 为重心横移（米）。
 export const READY_POSE={right:[1.05,-.15,-.25],left:[.8,.2,.35],elbowR:.65,elbowL:.55,wrist:[-.3,0,.12],yaw:0,pitch:.04,bend:.1};
+// 发球姿态：奖杯、拍头下沉、伸展触球、跨身随挥。
+export function servePoses(pad={x:0,y:0}){
+  const R=READY_POSE;
+  const trophy={...R,right:[1.9,-.55,1.1],left:[2.9,0,-.15],elbowR:1.7,elbowL:.1,wrist:[-.65,0,.2],yaw:-.85,hipYaw:-.5,pitch:-.18,bend:.55,weight:-.08,transfer:-1,roll:-.15};
+  const drop={...trophy,right:[2.45,-.6,.65],left:[2.2,0,-.35],elbowR:1.9,wrist:[-1.1,-.4,.15],hipYaw:-.1,yaw:-.65,bend:.32,pitch:-.22,transfer:-.2};
+  const hit={...R,right:[3.02,.1,.2],left:[.85,.2,-.4],elbowR:.12,elbowL:.9,wrist:[-.05-pad.y*.25,pad.x*.45,.05],hipYaw:.4,yaw:.25,pitch:.08,bend:.05,transfer:1,lift:.16,roll:.08};
+  const finish={...R,right:[1.15,.5,-.75],left:[.5,0,-.4],elbowR:.65,wrist:[.5,.75,.1],hipYaw:.65,yaw:.9,pitch:.3,bend:.25,weight:-.08,transfer:.7};
+  return {trophy,drop,hit,finish};
+}
 // 分阶段姿态：coil 引拍、drive 发力、contactPose 触球、finish 随挥。
 // backhand 控制反手；slice/top 控制切削/上旋，其余为平击。
 export function strokePoses(type,backhand){
-  const READY=READY_POSE,side=backhand?-1:1;
+  const R=READY_POSE,side=backhand?-1:1,slice=type==='slice',top=type==='top';
+  // 右手持拍：正手在身体右侧触球；单反在左前方，非持拍手反向展开平衡。
   if(type==='smash'){
-    const coil={...READY,right:[2.2,-.55,-.3],left:[2.5,.1,.2],elbowR:1.5,elbowL:.2,yaw:-.5,hipYaw:-.25,pitch:-.18,bend:.3};
-    const drive={...coil,right:[2.65,-.2,-.2],elbowR:.75,pitch:-.1,bend:.15};
-    const contactPose={...drive,right:[2.85,.15,-.25],left:[1.2,.3,.5],elbowR:.08,yaw:.25,hipYaw:.3,pitch:.15,bend:.08,wrist:[-.45,0,0]};
-    const finish={...contactPose,right:[.95,.8,-.35],left:[.6,.2,.4],elbowR:.7,yaw:.75,pitch:.35,bend:.25};
+    const coil={...R,right:[2,-.5,.9],left:[2.75,0,-.2],elbowR:1.65,elbowL:.15,wrist:[-.8,-.2,.1],yaw:-.7,hipYaw:-.4,pitch:-.15,bend:.4,transfer:-.7};
+    const drive={...coil,right:[2.6,-.4,.55],elbowR:1.3,wrist:[-1,-.3,.1],hipYaw:.1,yaw:-.4,bend:.2};
+    const contactPose={...R,right:[2.9,.12,.2],left:[1,.1,-.4],elbowR:.1,elbowL:.8,wrist:[-.1,.15,0],hipYaw:.4,yaw:.25,transfer:1,lift:.12,bend:.06};
+    const finish={...contactPose,right:[1.15,.65,-.7],elbowR:.65,wrist:[.35,.65,0],yaw:.8,pitch:.28,bend:.22,lift:0,transfer:.6};
     return {coil,drive,contactPose,finish};
   }
   if(type==='volley'){
-    const coil={...READY,right:[1.5,-side*.35,-.6],elbowR:.65,yaw:-side*.25,bend:.28};
-    const drive={...coil,right:[1.55,side*.1,-.55],elbowR:.4,yaw:0};
-    const contactPose={...drive,right:[1.6,side*.3,-.5],elbowR:.12,yaw:side*.18,weight:side*.06};
-    const finish={...contactPose,right:[1.45,side*.5,-.45],elbowR:.3,yaw:side*.3,bend:.15};
+    const coil={...R,right:backhand?[1.35,-.3,-.7]:[1.3,-.25,.65],elbowR:.65,left:[1,.2,-.4],yaw:-side*.35,hipYaw:-side*.2,bend:.3,transfer:-.3};
+    const drive={...coil,right:backhand?[1.45,-.1,-.6]:[1.4,0,.55],elbowR:.4,transfer:.2};
+    const contactPose={...drive,right:backhand?[1.45,.1,-.55]:[1.4,.15,.5],elbowR:.22,wrist:[.25,0,0],yaw:side*.08,transfer:1};
+    const finish={...contactPose,right:backhand?[1.3,.2,-.5]:[1.35,.25,.4],elbowR:.35,yaw:side*.22,bend:.15,transfer:.7};
     return {coil,drive,contactPose,finish};
   }
-  const slice=type==='slice',top=type==='top';
-  const coil={...READY,right:backhand?[1.25,.85,-1.05]:[slice?1.85:.75,-1.0,-.65],left:backhand?[1.1,-.35,.1]:[1.25,.35,.55],elbowR:1.15,elbowL:.7,wrist:[slice?.5:-.45,-.2,side*.3],yaw:-side*.85,hipYaw:-side*.42,pitch:.12,bend:.34,weight:-side*.1};
-  const drive={...coil,right:backhand?[1.15,.35,-.85]:[slice?1.65:.9,-.65,-.7],elbowR:.8,hipYaw:side*.15,yaw:-side*.45,bend:.27,weight:side*.025};
-  const contactPose={...READY,right:backhand?[1.45,-.65,-.6]:[1.4,.35,-.65],left:backhand?[.65,.5,.9]:[.8,-.4,.65],elbowR:.18,elbowL:.7,wrist:[slice?.45:top?-.4:-.12,0,-side*.1],yaw:side*.15,hipYaw:side*.35,pitch:.1,bend:.16,weight:side*.1};
-  const finish={...contactPose,right:backhand?[slice?1.2:2.05,-1.05,-.85]:[slice?1.05:top?2.35:1.95,1.05,-.3],left:backhand?[.45,.65,1.05]:[.6,-.3,.55],elbowR:backhand?.35:.85,wrist:[slice?.55:top?-.7:-.25,.15,-side*.4],yaw:side*.85,hipYaw:side*.55,bend:.09,weight:side*.07};
+  const coil={...R,right:backhand?[1.1,.55,-.9]:[slice?1.75:.8,-.75,1.1],left:backhand?[1.15,-.2,.35]:[1.3,.1,-.7],elbowR:1.15,elbowL:.6,wrist:[slice?.4:-.65,-.4,side*.15],yaw:-side*1.05,hipYaw:-side*.55,pitch:.08,bend:.42,weight:side*.1,transfer:-1};
+  // 髋先打开，肩仍保持侧转，拍头落到球下方（切削则从高向低）。
+  const drive={...coil,right:backhand?[.85,.1,-.85]:[slice?1.55:.6,-.45,.9],elbowR:.8,wrist:[slice?.4:-.85,-.3,side*.12],hipYaw:side*.12,yaw:-side*.65,bend:.3,weight:side*.04,transfer:-.25};
+  const contactPose={...R,right:backhand?[1.25,-.05,-.65]:[1.25,.1,.6],left:backhand?[.65,-.3,1.05]:[.9,.2,-.5],elbowR:.15,elbowL:.7,wrist:[slice?.35:top?-.15:0,0,0],yaw:side*.15,hipYaw:side*.4,pitch:.08,bend:.16,weight:-side*.07,transfer:1};
+  const finish={...contactPose,right:backhand?[slice?1.05:1.8,-.5,-1]:[slice?1.05:top?2.15:1.85,.65,-.65],left:backhand?[.4,-.4,1.1]:[.8,.2,-.4],elbowR:backhand?.25:1.05,wrist:[slice?.5:top?.45:.25,.2,-side*.2],yaw:side*.9,hipYaw:side*.6,bend:.12,weight:-side*.1,transfer:.65};
   return {coil,drive,contactPose,finish};
 }

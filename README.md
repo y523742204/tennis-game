@@ -102,6 +102,8 @@ npm test
 
 脚步由 `animation.stepLength/stepLift/shuffleLift/footPlantRatio` 调整步长、抬脚与支撑比例；`openWidth/closedWidth/closedDepth` 调整站距和前后错位；`openLateralSpeed` 控制横向追球时采用开放式的阈值；`footDamping` 控制脚步过渡速度。动画不改变球员实际移速和体力消耗。
 
+关闭式站位改为后脚、前脚依次抬起调整，触球到随挥阶段保持脚尖方向与前后错位，随后依次收脚，避免双脚同步扭转。`closedFrontYaw/closedRearYaw/closedStepLift` 控制前后脚朝向和调整时抬脚高度；关闭式站位不再随速度变化改变脚尖角度。
+
 `dist/index.html` 的 import map 为本地模块统一添加缓存版本。部署新代码时应更新其中的版本后缀及入口脚本后缀，避免浏览器混用新旧模块。
 
 球速调参：`shot.serveSpeedKmh` 为发球基准，`shot.speedKmh` 为各球路基准，`shot.perfectSpeed` 为暴力击球倍率，`shot.perfectDipSpin` 为高速回球下坠旋转。`shot.receiverDepth` 控制接发站位，`shot.serveTargetDepth` 控制默认发球深度。`dist/shot.js` 按实际出拍速度求解落点和过网弧线；测速直接使用球的三维速度长度 ×3.6。

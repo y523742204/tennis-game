@@ -3,6 +3,20 @@ import assert from 'node:assert/strict';
 import {chooseStance,footTargets,legAngles} from '../dist/footwork.js';
 import {createPlayer,updatePlayer,beginStroke} from '../dist/player.js';
 import * as THREE from '../dist/vendor/three.module.js';
+import {CONFIG as CFG} from '../dist/config.js';
+test('closed feet turn sequentially while lifted and hold through contact despite speed changes',()=>{
+ for(const backhand of [false,true]){
+  const sample=(progress,speed=0)=>footTargets({stance:'closed',progress,backhand,speed,vx:speed,amount:.5});
+  let previous=sample(0);
+  for(let i=1;i<=200;i++){
+   const next=sample(i/200),changed=next.map((f,j)=>Math.abs(f.yaw-previous[j].yaw)>1e-6);
+   assert.ok(!(changed[0]&&changed[1]),'both feet must not twist together');
+   next.forEach((f,j)=>{if(changed[j])assert.ok(f.lift>1e-6||previous[j].lift>1e-6)});previous=next;
+  }
+  const set=sample(CFG.animation.coil),hit=sample(CFG.animation.contact,5),follow=sample(CFG.animation.finish,2);
+  for(let j=0;j<2;j++){assert.equal(set[j].yaw,hit[j].yaw);assert.equal(hit[j].yaw,follow[j].yaw);assert.equal(set[j].z,hit[j].z)}
+ }
+});
 test('stance choice uses shot and lateral pressure',()=>{
  assert.equal(chooseStance(), 'open');assert.equal(chooseStance({backhand:true}),'closed');
  assert.equal(chooseStance({type:'slice'}),'closed');assert.equal(chooseStance({backhand:true,lateral:3}),'open');

@@ -80,7 +80,7 @@ export function updatePlayer(player,dt,{end=1,moving=false,serveReady=false,read
   const u=s?Math.min(s.time/s.duration,1):0;
   const setup=s?Math.min(u/CFG.animation.coil,1)*Math.min((1-u)/(1-CFG.animation.recover),1):0;
   const stanceAmount=Math.max(0,setup)*(1-stride*CFG.animation.strideDuringStroke);
-  const feet=footTargets({phase:r.gait,speed,vx:r.velocity.x*end,vz:r.velocity.z*end,stance:s?.stance,amount:stanceAmount,backhand:s?.backhand,split:split.width});
+  const feet=footTargets({phase:r.gait,speed,vx:r.velocity.x*end,vz:r.velocity.z*end,stance:s?.stance,amount:stanceAmount,backhand:s?.backhand,split:split.width,progress:s?u:null});
   for(const [i,leg] of [r.leftLeg,r.rightLeg].entries()){
     const foot=feet[i],sign=i===0?-1:1;
     leg.hip.position.set(sign*.16,.84,0);
@@ -89,6 +89,8 @@ export function updatePlayer(player,dt,{end=1,moving=false,serveReady=false,read
     const angles=legAngles(leg.foot.x-leg.hip.position.x-r.body.position.x,leg.foot.y-.84-r.body.position.y,leg.foot.z-r.body.position.z);
     rot(leg.hip,[angles.hip,0,angles.roll]);rot(leg.knee,[angles.knee,0,0]);
     rot(leg.ankle,[angles.ankle,foot.yaw,-angles.roll]);
+    // 关闭式转脚曲线自身已平滑；额外阻尼会让上一只脚的转动拖到下一只脚落地。
+    if(s?.stance==='closed')leg.ankle.rotation.y=foot.yaw;
   }
   const progress=s?s.time/s.duration:0;
   r.trail.visible=!!s&&progress>(s.serve?CFG.animation.serveTrailStart:CFG.animation.strokeTrailStart)&&progress<(s.serve?CFG.animation.serveTrailEnd:CFG.animation.strokeTrailEnd);

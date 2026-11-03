@@ -152,6 +152,7 @@ export const CONFIG={
     openWidth:.34,closedWidth:.20,closedDepth:.28, // 开放式半站距、关闭式半站距与前后错位（米）
     openLateralSpeed:1.2, // 横向追球超过此速度优先开放式，米/真实秒
     footDamping:24, // 脚步目标过渡速度
+    closedFrontYaw:.2,closedRearYaw:.7,closedStepLift:.045, // 关闭式前/后脚朝向及调整站位时的抬脚高度
     fullStrideSpeed:5, // 达到完整步幅的速度
     gaitBase:7,gaitSpeed:10,gaitFade:4, // 步频基础值/速度增量/低速淡出
     teleportDistance:1, // 单帧移动超过该值视为换位，不播放跑动

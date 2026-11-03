@@ -9,7 +9,8 @@ export const CONFIG={
     runCostPerMeter:2.2, // 每移动一米消耗的体力
     shotBaseCost:4, // 每次击球基础消耗
     shotPowerCost:.14, // 每一点力量额外消耗
-    shotTypeCost:{flat:0,top:4,slice:2,volley:1,smash:5}, // 各球种附加消耗；发球不扣击球体力
+    shotTypeCost:{flat:0,top:4,slice:2,volley:5,smash:10}, // 截击/高压额外消耗提高；发球不扣击球体力
+    netRushCost:12, // 每次点击主动上网时立即扣除的体力（跑动距离仍正常耗体力）
     perfectCostMultiplier:.7, // Perfect 消耗倍率
     lowThreshold:30, // 低于此绝对体力值开始降低球速和稳定性
     minimumMoveMultiplier:.45, // 零体力时移动速度倍率
@@ -27,6 +28,7 @@ export const CONFIG={
     deadZoneColor:'#747a78', // 降低的容量：右侧灰色死区
   },
   movement:{
+    netRushMultiplier:1.8,netRushDistance:10, // 主动上网冲刺速度倍率、最多加速距离（米）；仅向前移动生效
     humanSpeed:6.5, // 玩家满体力速度，米/模拟秒
     cpuSpeed:{easy:4.8,normal:6.8,hard:8.8}, // 三档电脑速度
     recoveryMultiplier:.84, // 击球后回位速度倍率

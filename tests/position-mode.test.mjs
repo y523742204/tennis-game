@@ -35,9 +35,17 @@ const source=readFileSync(new URL('../dist/game.js',import.meta.url),'utf8');
 const handler=source.slice(source.indexOf("$('positionMode').onclick="),source.indexOf("$('courtMenu').onclick="));
 test('live toggle replans incoming ball without resetting elapsed time or current choice',()=>{
  const button={},human={position:{x:0,z:5},userData:{rig:{swing:{}}}};
- const ctx={started:true,paused:false,phase:'flight',lastHitter:1,humanPositionMode:'baseline',recoveryTargets:[null,null],recoveryDelay:[1,1],ends:[1,-1],human,plan:null,flightSamples:samples,elapsed:.5,stamina:[100,100],runSpeed:()=>6.5,isServe:false,selectContact,recoveryPosition,updateContactGuide(){},dirty:false,say(){},ui(){},$:()=>button};
+ const ctx={CFG,energy:{spend(){}},netRushRemaining:0,started:true,paused:false,phase:'flight',lastHitter:1,humanPositionMode:'baseline',recoveryTargets:[null,null],recoveryDelay:[1,1],ends:[1,-1],human,plan:null,flightSamples:samples,elapsed:.5,stamina:[100,100],runSpeed:()=>6.5,isServe:false,selectContact,recoveryPosition,updateContactGuide(){},dirty:false,say(){},ui(){},$:()=>button};
  vm.createContext(ctx);vm.runInContext(handler,ctx);button.onclick();
  assert.equal(ctx.humanPositionMode,'net');assert.equal(ctx.plan.kind,'volley');assert.equal(ctx.plan.time,1.5);assert.equal(ctx.elapsed,.5);assert.equal(ctx.recoveryTargets[0].z,CFG.tactics.attackDepth);
  button.onclick();assert.equal(ctx.humanPositionMode,'baseline');assert.equal(ctx.plan.ball.bounces,1);assert.equal(ctx.recoveryTargets[0].z,CFG.tactics.baselineDepth);
  ctx.paused=true;button.onclick();assert.equal(ctx.humanPositionMode,'baseline');
+});
+test('entering net mode charges once, retreat and paused clicks do not charge',()=>{
+ const button={},ctx={CFG,netRushRemaining:0,started:true,paused:false,phase:'flight',lastHitter:0,humanPositionMode:'baseline',recoveryTargets:[null,null],recoveryDelay:[0,0],ends:[1,-1],human:{position:{x:0,z:11}},plan:null,recoveryPosition,say(){},ui(){},$:()=>button};
+ let spent=0;ctx.energy={spend(who,cost){assert.equal(who,0);spent+=cost}};
+ vm.createContext(ctx);vm.runInContext(handler,ctx);button.onclick();assert.equal(spent,CFG.stamina.netRushCost);assert.equal(ctx.netRushRemaining,CFG.movement.netRushDistance);
+ button.onclick();assert.equal(spent,CFG.stamina.netRushCost);assert.equal(ctx.netRushRemaining,0);
+ ctx.paused=true;button.onclick();assert.equal(spent,CFG.stamina.netRushCost);
+ ctx.paused=false;button.onclick();assert.equal(spent,CFG.stamina.netRushCost*2);
 });

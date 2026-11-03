@@ -51,7 +51,7 @@ const energy=new Stamina();
 const sounds=new TennisAudio();
 let match=new TennisMatch(),difficulty=CFG.match.difficulty,phase='menu',started=false,paused=false,stamina=energy.values,ends=[1,-1];
 let lastHitter=0,bounces=0,decision=null,isServe=true,serveAttempt=1,netTouched=false,flightIsServe=true;
-let humanPositionMode='baseline',flightSamples=[];
+let humanPositionMode='baseline',flightSamples=[],netRushRemaining=0;
 let plan=null,elapsed=0,acc=0,aiWait=0,turn=1,aim={x:-2,z:-4},selected='top',gauge=.5,dirty=true,hold=null;
 const wheel=$('wheel'),canvas=renderer.domElement;
 let screenLayout=null,previousViewport=null;
@@ -197,7 +197,11 @@ function predict(){
 }
 function movePlayerTo(who,target,dt,speedFactor=1){
  if(!target)return true;target=clampPlayerTarget(target);const p=players[who].position,dx=target.x-p.x,dz=target.z-p.z,distance=Math.hypot(dx,dz);
- const move=Math.min(distance,runSpeed(who)*speedFactor*dt);if(distance>.001){p.x+=dx/distance*move;p.z+=dz/distance*move;energy.spend(who,move*CFG.stamina.runCostPerMeter)}return distance-move<CFG.movement.arrivalTolerance;
+ const rush=who===0&&humanPositionMode==='net'&&netRushRemaining>0&&dz*ends[0]<0&&Math.abs(p.z)>CFG.tactics.attackDepth;
+ const normal=runSpeed(who)*speedFactor*dt;
+ const boosted=rush?Math.min(normal*CFG.movement.netRushMultiplier,netRushRemaining):0;
+ const move=Math.min(distance,rush?Math.max(normal,boosted):normal);
+ if(rush)netRushRemaining=Math.max(0,netRushRemaining-move);if(distance>.001){p.x+=dx/distance*move;p.z+=dz/distance*move;energy.spend(who,move*CFG.stamina.runCostPerMeter)}if(who===0&&Math.abs(p.z)<=CFG.tactics.attackDepth)netRushRemaining=0;return distance-move<CFG.movement.arrivalTolerance;
 }
 function recoverPlayers(dt,excluded=null){
  for(let who=0;who<2;who++){
@@ -379,13 +383,14 @@ addEventListener('keydown',e=>{if(hold?.ready&&hold.mode==='rally'&&['ArrowLeft'
 function openMenu(){cancelHold();paused=true;$('startMenu').hidden=false;$('resume').hidden=!started||match.winner!==null;ui()}
 $('gamesSetting').value=String(CFG.match.gamesToWin);$('difficultySetting').value=CFG.match.difficulty;document.querySelector('input[name="scoring"][value="'+(CFG.match.noAd?'golden':'ad')+'"]').checked=true;
 $('resume').onclick=()=>{$('startMenu').hidden=true;paused=false;dirty=true;ui()};
-$('setup').onsubmit=e=>{e.preventDefault();cancelHold();match=new TennisMatch({gamesToWin:Number($('gamesSetting').value),noAd:document.querySelector('input[name="scoring"]:checked').value==='golden'});difficulty=$('difficultySetting').value;started=true;paused=false;humanPositionMode='baseline';ends=[1,-1];viewEnd();energy.reset();stamina=energy.values;displayedStamina=[CFG.stamina.full,CFG.stamina.full];trailingStamina=[CFG.stamina.full,CFG.stamina.full];turn=1;serveAttempt=1;pendingStroke=null;lastShotSpeed=null;$('shotSpeed').hidden=true;for(const p of players)p.userData.rig.swing=null;$('startMenu').hidden=true;$('sideMenu').hidden=true;prepareServe()};
+$('setup').onsubmit=e=>{e.preventDefault();cancelHold();match=new TennisMatch({gamesToWin:Number($('gamesSetting').value),noAd:document.querySelector('input[name="scoring"]:checked').value==='golden'});difficulty=$('difficultySetting').value;started=true;paused=false;humanPositionMode='baseline';netRushRemaining=0;ends=[1,-1];viewEnd();energy.reset();stamina=energy.values;displayedStamina=[CFG.stamina.full,CFG.stamina.full];trailingStamina=[CFG.stamina.full,CFG.stamina.full];turn=1;serveAttempt=1;pendingStroke=null;lastShotSpeed=null;$('shotSpeed').hidden=true;for(const p of players)p.userData.rig.swing=null;$('startMenu').hidden=true;$('sideMenu').hidden=true;prepareServe()};
 for(const node of document.querySelectorAll('[data-side]'))node.onclick=()=>{match.sideOverride=Number(node.dataset.side);$('sideMenu').hidden=true;prepareServe()};
 addEventListener('blur',()=>{cancelHold();if(phase==='flight'||phase==='ai'||phase==='stroke'){paused=true;say('已暂停 · P 继续');ui()}});
  document.addEventListener('visibilitychange',()=>{if(document.hidden){cancelHold();if(started&&['flight','ai','stroke'].includes(phase)){paused=true;ui()}}});
 $('positionMode').onclick=()=>{
  if(!started||paused||phase==='end')return;
  humanPositionMode=humanPositionMode==='net'?'baseline':'net';
+ if(humanPositionMode==='net'){energy.spend(0,CFG.stamina.netRushCost);netRushRemaining=CFG.movement.netRushDistance}else netRushRemaining=0;
  recoveryTargets[0]=recoveryPosition({end:ends[0],strikePosition:human.position,mode:humanPositionMode,opponentContact:plan?.ball});recoveryDelay[0]=0;
  // 使用本次来球的预测样本重新选择触球时机，不重置球的物理时间或已锁定的落点/力量。
  if(phase==='flight'&&lastHitter===1){
@@ -394,7 +399,7 @@ $('positionMode').onclick=()=>{
   plan=contact?{...contact,time:contact.time+elapsed,receiver:0}:null;
   human.userData.rig.swing=null;rallyWindup=plan?{receiver:0,started:false,choice:null}:null;updateContactGuide();dirty=true;
  }
- say(humanPositionMode==='net'?'主动上网 · 优先截击/高压；接发球仍需先弹地':'回防底线 · 优先弹地后的正反手击球');ui();
+ say(humanPositionMode==='net'?'上网冲刺 · 体力 −'+CFG.stamina.netRushCost+' · 优先截击/高压':'回防底线 · 优先弹地后的正反手击球');ui();
 };
 $('courtMenu').onclick=openMenu;
 $('soundEnabled').checked=sounds.enabled;

@@ -118,6 +118,11 @@ export const CONFIG={
   },
   tactics:{
     attackDepth:3.2,baselineDepth:11.2, // 主动上网/回防底线的站位纵深，距网米数
+    attackMoveMultiplier:1, // 主动上网按正常跑速推进，不使用普通回位的减速倍率
+    attackVolleyDepth:8,attackVolleyMinHeight:.45,attackVolleyMaxHeight:2.5, // 主动上网时扩大截击区域和高度，米
+    attackVolleyMaxSpeed:40,attackSmashMaxSpeed:38, // 主动上网允许截击普通高速来球，米/模拟秒
+    attackSmashMinHeight:2.1,attackSmashMaxHeight:3.7,attackSmashRiseSpeed:1, // 高压高度与允许的微小上升速度
+    attackSetupTime:.06, // 主动拦截站稳余量，模拟秒；仍需实际追得到球
     volleyMinHeight:.65,volleyMaxHeight:2.1,volleyDepth:6, // 网前截击高度及距网最远距离，米
     volleyMaxSpeed:25, // 允许主动截击的软球最高来球速度，米/模拟秒
     smashMinHeight:2.2,smashMaxHeight:3.5,smashMaxSpeed:27, // 高压：下降高球的高度及速度上限

@@ -65,7 +65,7 @@ function resizeCourt(){
  previousViewport={width,height};
  renderer.setPixelRatio(Math.min(devicePixelRatio,screenLayout.mobile?CFG.view.mobilePixelRatio:CFG.view.desktopPixelRatio));renderer.setSize(width,height);fitCourtCamera(camera,screenLayout,ends[0]);
  const viewDistance=camera.position.length();scene.fog.near=Math.max(27,viewDistance-8);scene.fog.far=viewDistance+80;
- if(hold?.ready)placeCurrentGesture();dirty=true;
+ if(hold?.ready)placeCurrentGesture();placePositionButton();dirty=true;
 }
 function placeTargetPower(){
  if(!screenLayout||!hold?.ready)return;
@@ -142,8 +142,15 @@ function showShotSpeed(who,type,serving,perfect,velocity){
  panel.setAttribute('aria-label',(who===0?'你':'电脑')+(perfect?' Perfect 暴力击球':'击球')+'，出拍球速 '+kmh+' 千米每小时');
 }
 function cost(power,type){return CFG.stamina.shotBaseCost+power*CFG.stamina.shotPowerCost+(CFG.stamina.shotTypeCost[type]||0)}
+function placePositionButton(){
+ if(!screenLayout)return;
+ const panel=$('positionMode'),p=new THREE.Vector3(netHalfWidth+.6,.7,0).project(camera),r=canvas.getBoundingClientRect();
+ const x=(p.x+1)*r.width/2,y=(1-p.y)*r.height/2,w=panel.offsetWidth||112,h=panel.offsetHeight||46,s=screenLayout.safe;
+ panel.style.left=THREE.MathUtils.clamp(x-w/2,s.left+8,r.width-s.right-w-8)+'px';
+ panel.style.top=THREE.MathUtils.clamp(y-h/2,s.top+112,Math.max(s.top+112,r.height-s.bottom-h-8))+'px';
+}
 function ui(){
- const positioning=$('positionMode');positioning.hidden=!started||!$('startMenu').hidden||!$('sideMenu').hidden;positioning.disabled=paused||phase==='end';positioning.textContent=humanPositionMode==='net'?'回防底线':'主动上网';positioning.setAttribute('aria-pressed',String(humanPositionMode==='net'));
+ const positioning=$('positionMode');positioning.hidden=!started||!$('startMenu').hidden||!$('sideMenu').hidden;positioning.disabled=paused||phase==='end';positioning.textContent=humanPositionMode==='net'?'回防底线':'主动上网';positioning.setAttribute('aria-pressed',String(humanPositionMode==='net'));placePositionButton();
  const labels=match.labels();for(let i=0;i<2;i++){$('sets'+i).textContent=match.sets[i];$('games'+i).textContent=match.games[i];$('points'+i).textContent=labels[i];$('server'+i).style.visibility=match.server===i?'visible':'hidden'}
  $('courtMenu').hidden=!started||!$('startMenu').hidden||!$('sideMenu').hidden;
  $('pointHeading').textContent=match.tieBreak?'TB':'分';
@@ -196,7 +203,7 @@ function recoverPlayers(dt,excluded=null){
  for(let who=0;who<2;who++){
   if(who===excluded||!recoveryTargets[who])continue;
   if(recoveryDelay[who]>0){recoveryDelay[who]=Math.max(0,recoveryDelay[who]-dt);continue}
-  if(movePlayerTo(who,recoveryTargets[who],dt,CFG.movement.recoveryMultiplier))recoveryTargets[who]=null;
+  if(movePlayerTo(who,recoveryTargets[who],dt,who===0&&humanPositionMode==='net'?CFG.tactics.attackMoveMultiplier:CFG.movement.recoveryMultiplier))recoveryTargets[who]=null;
  }
 }
 function viewEnd(){if(screenLayout)fitCourtCamera(camera,screenLayout,ends[0])}
@@ -258,7 +265,7 @@ function launchStroke(who,type,power,perfect=false,pad=null,returnChoice=null){
  showShotSpeed(who,type,serving,perfect,physicalBall.velocity);
  sounds.hit({type,serving,perfect,speed:speedKmh(physicalBall.velocity)});
  if(!serving)energy.spend(who,cost(power,type)*(perfect?CFG.stamina.perfectCostMultiplier:1));lastHitter=who;bounces=0;decision=null;netTouched=false;elapsed=0;acc=0;phase='flight';plan=predict();
- recoveryTargets[1-who]=null;recoveryTargets[who]=recoveryPosition({end:ends[who],opponentContact:plan?.ball||shot.landing||target,strikePosition:players[who].position,mode:who===0?humanPositionMode:'auto'});recoveryDelay[who]=CFG.movement.recoveryDelay;updateContactGuide();
+ recoveryTargets[1-who]=null;recoveryTargets[who]=recoveryPosition({end:ends[who],opponentContact:plan?.ball||shot.landing||target,strikePosition:players[who].position,mode:who===0?humanPositionMode:'auto'});recoveryDelay[who]=who===0&&humanPositionMode==='net'?0:CFG.movement.recoveryDelay;updateContactGuide();
  if(plan){
   rallyWindup={receiver:plan.receiver,started:false,choice:plan.receiver===1?{type:['top','flat','slice'][Math.floor(Math.random()*3)],power:CFG.ai.returnPowerMin+Math.random()*CFG.ai.returnPowerRange,perfect:false}:null};
  }

@@ -9,25 +9,26 @@ export function travelTime(distance,speed,stamina=CFG.stamina.full) {
   const tiring=Math.min(distance,stamina/CFG.stamina.runCostPerMeter),remaining=distance-tiring;
   return Math.log(speed/Math.max(base*CFG.stamina.minimumMoveMultiplier,speed-decay*tiring))/decay+remaining/(base*CFG.stamina.minimumMoveMultiplier);
 }
-export function selectAirContact(samples,{position,end,speed,stamina=CFG.stamina.full}) {
+export function selectAirContact(samples,{position,end,speed,stamina=CFG.stamina.full,preference='auto'}) {
   const t=CFG.tactics,candidates=[];
+  const attack=preference==='net';
   for(const ball of samples){
     if(ball.bounces!==0||ball.z*end<t.minimumNetDistance||ball.vz*end<=0)continue;
     const pace=Math.hypot(ball.vx,ball.vy,ball.vz);
-    const kind=ball.vy<=0&&ball.y>=t.smashMinHeight&&ball.y<=t.smashMaxHeight&&pace<=t.smashMaxSpeed?'smash':
-      ball.z*end<=t.volleyDepth&&ball.y>=t.volleyMinHeight&&ball.y<=t.volleyMaxHeight&&pace<=t.volleyMaxSpeed?'volley':null;
+    const kind=ball.vy<=(attack?t.attackSmashRiseSpeed:0)&&ball.y>=(attack?t.attackSmashMinHeight:t.smashMinHeight)&&ball.y<=(attack?t.attackSmashMaxHeight:t.smashMaxHeight)&&pace<=(attack?t.attackSmashMaxSpeed:t.smashMaxSpeed)?'smash':
+      ball.z*end<=(attack?t.attackVolleyDepth:t.volleyDepth)&&ball.y>=(attack?t.attackVolleyMinHeight:t.volleyMinHeight)&&ball.y<=(attack?t.attackVolleyMaxHeight:t.volleyMaxHeight)&&pace<=(attack?t.attackVolleyMaxSpeed:t.volleyMaxSpeed)?'volley':null;
     if(!kind)continue;
     for(const side of [1,-1]){
       const stance={x:ball.x-side*t.stanceSide*end,z:ball.z+t.stanceBehind*end,backhand:kind==='volley'&&side<0};
       const distance=Math.hypot(stance.x-position.x,stance.z-position.z);
-      if(!insidePlayerArea(stance)||ball.time-travelTime(distance,speed,stamina)<t.airSetupTime)continue;
+      if(!insidePlayerArea(stance)||ball.time-travelTime(distance,speed,stamina)<(attack?t.attackSetupTime:t.airSetupTime))continue;
       candidates.push({...stance,kind,ball,time:ball.time,landing:null,reachable:true,score:ball.time+distance*.04});
     }
   }
   return candidates.sort((a,b)=>a.score-b.score)[0]||null;
 }
 export function selectContact(samples,{position,end,speed,stamina=CFG.stamina.full,allowAir=false,preference='auto'}) {
-  const air=allowAir?selectAirContact(samples,{position,end,speed,stamina}):null;
+  const air=allowAir?selectAirContact(samples,{position,end,speed,stamina,preference}):null;
   if(air&&preference!=='baseline')return air;
   const candidates=[];
   for(const ball of samples){

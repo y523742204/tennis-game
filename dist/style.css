@@ -30,3 +30,6 @@ html,body{overscroll-behavior:none;-webkit-text-size-adjust:100%;text-size-adjus
 #serveCancel{position:fixed;z-index:30;top:0;left:0;right:0;padding:calc(var(--safe-top,0px) + 12px) 8px 12px;min-height:calc(var(--safe-top,0px) + 48px);background:#6b392fee;color:#fff1dc;text-align:center;font-size:12px;pointer-events:none}
 
 .position-mode{position:absolute;z-index:6;right:calc(var(--safe-right,0px) + 14px);bottom:calc(var(--safe-bottom,0px) + 18px);min-height:46px;padding:10px 16px;border:1px solid #dce9b080;background:#173d2fee;color:#e9f3d0;border-radius:24px;touch-action:manipulation}.position-mode[aria-pressed="true"]{background:#dce9aa;color:#214432}.position-mode:disabled{opacity:.45}
+
+/* 战术按钮跟随球网右侧的屏幕投影，换边/旋转屏幕时重新定位。 */
+.position-mode{right:auto;bottom:auto;padding:8px 12px;font-size:12px;min-height:44px}

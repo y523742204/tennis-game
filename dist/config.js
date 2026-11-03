@@ -117,6 +117,7 @@ export const CONFIG={
     returnWidth:7,returnDepthMin:6,returnDepthRange:4, // 回球落点范围
   },
   tactics:{
+    attackDepth:3.2,baselineDepth:11.2, // 主动上网/回防底线的站位纵深，距网米数
     volleyMinHeight:.65,volleyMaxHeight:2.1,volleyDepth:6, // 网前截击高度及距网最远距离，米
     volleyMaxSpeed:25, // 允许主动截击的软球最高来球速度，米/模拟秒
     smashMinHeight:2.2,smashMaxHeight:3.5,smashMaxSpeed:27, // 高压：下降高球的高度及速度上限

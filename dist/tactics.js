@@ -26,9 +26,9 @@ export function selectAirContact(samples,{position,end,speed,stamina=CFG.stamina
   }
   return candidates.sort((a,b)=>a.score-b.score)[0]||null;
 }
-export function selectContact(samples,{position,end,speed,stamina=CFG.stamina.full,allowAir=false}) {
+export function selectContact(samples,{position,end,speed,stamina=CFG.stamina.full,allowAir=false,preference='auto'}) {
   const air=allowAir?selectAirContact(samples,{position,end,speed,stamina}):null;
-  if(air)return air;
+  if(air&&preference!=='baseline')return air;
   const candidates=[];
   for(const ball of samples){
     if(ball.bounces!==1||!ball.landing||ball.z*end<=CFG.tactics.minimumNetDistance||ball.vz*end<=0)continue;
@@ -46,17 +46,18 @@ export function selectContact(samples,{position,end,speed,stamina=CFG.stamina.fu
         score:Math.abs(ball.y-WAIST_HEIGHT)*CFG.tactics.heightWeight+distance*CFG.tactics.distanceWeight+ball.time*CFG.tactics.timeWeight+(stance.backhand?CFG.tactics.backhandPenalty:0)});
     }
   }
-  if(!candidates.length)return null;
+  if(!candidates.length)return air;
   // A reachable waist-height contact outranks an earlier low interception.
   const reachable=candidates.filter(c=>c.reachable);
+  if(!reachable.length&&air)return air;
   const pool=reachable.length?reachable:candidates;
   const waist=pool.filter(c=>c.waist),eligible=waist.length?waist:pool;
   // Ascending waist-height contact is preferred; late arrivals can use descent.
   const ascending=waist.filter(c=>c.ball.vy>=0);
   return (ascending.length?ascending:eligible).sort((a,b)=>a.score-b.score)[0];
 }
-export function recoveryPosition({end,opponentContact,strikePosition}) {
-  const depth=Math.abs(strikePosition.z)<CFG.tactics.approachDepth?CFG.tactics.nearRecoveryDepth:CFG.tactics.deepRecoveryDepth,z=end*depth;
+export function recoveryPosition({end,opponentContact,strikePosition,mode='auto'}) {
+  const depth=mode==='net'?CFG.tactics.attackDepth:mode==='baseline'?CFG.tactics.baselineDepth:Math.abs(strikePosition.z)<CFG.tactics.approachDepth?CFG.tactics.nearRecoveryDepth:CFG.tactics.deepRecoveryDepth,z=end*depth;
   const opponent=opponentContact||{x:0,z:-end*CFG.tactics.fallbackOpponentDepth};
   const baseline=end*CFG.court.halfLength;
   const left={x:-CFG.court.halfWidth-opponent.x,z:baseline-opponent.z},right={x:CFG.court.halfWidth-opponent.x,z:baseline-opponent.z};

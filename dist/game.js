@@ -51,6 +51,7 @@ const energy=new Stamina();
 const sounds=new TennisAudio();
 let match=new TennisMatch(),difficulty=CFG.match.difficulty,phase='menu',started=false,paused=false,stamina=energy.values,ends=[1,-1];
 let lastHitter=0,bounces=0,decision=null,isServe=true,serveAttempt=1,netTouched=false,flightIsServe=true;
+let humanPositionMode='baseline',flightSamples=[];
 let plan=null,elapsed=0,acc=0,aiWait=0,turn=1,aim={x:-2,z:-4},selected='top',gauge=.5,dirty=true,hold=null;
 const wheel=$('wheel'),canvas=renderer.domElement;
 let screenLayout=null,previousViewport=null;
@@ -142,6 +143,7 @@ function showShotSpeed(who,type,serving,perfect,velocity){
 }
 function cost(power,type){return CFG.stamina.shotBaseCost+power*CFG.stamina.shotPowerCost+(CFG.stamina.shotTypeCost[type]||0)}
 function ui(){
+ const positioning=$('positionMode');positioning.hidden=!started||!$('startMenu').hidden||!$('sideMenu').hidden;positioning.disabled=paused||phase==='end';positioning.textContent=humanPositionMode==='net'?'回防底线':'主动上网';positioning.setAttribute('aria-pressed',String(humanPositionMode==='net'));
  const labels=match.labels();for(let i=0;i<2;i++){$('sets'+i).textContent=match.sets[i];$('games'+i).textContent=match.games[i];$('points'+i).textContent=labels[i];$('server'+i).style.visibility=match.server===i?'visible':'hidden'}
  $('courtMenu').hidden=!started||!$('startMenu').hidden||!$('sideMenu').hidden;
  $('pointHeading').textContent=match.tieBreak?'TB':'分';
@@ -174,6 +176,7 @@ function trajectory(who,type,target,power,perfect=false,pad=null,origin=null){
 }
 function runSpeed(who){return (who===0?CFG.movement.humanSpeed:CFG.movement.cpuSpeed[difficulty])*staminaEffects(stamina[who]).movement}
 function predict(){
+ flightSamples=[];
  const {w,b,ground}=simulation({floorEnabled:true,netEnabled:true});let bounce=0,landing=null,predictedTime=0;const receiver=1-lastHitter,samples=[];
  b.addEventListener('collide',event=>{if(event.body===ground){bounce++;if(!landing)landing={x:b.position.x,z:b.position.z,time:predictedTime}}});
  for(let i=1;i<CFG.tactics.predictionSteps;i++){
@@ -181,7 +184,8 @@ function predict(){
   if(landing){const legal=isServe?validServiceLanding(landing.x,landing.z,ends[lastHitter],match.serviceSide):Math.abs(landing.x)<=CFG.court.halfWidth+CFG.physics.ballRadius&&Math.abs(landing.z)<=CFG.court.halfLength+CFG.physics.ballRadius&&landing.z*ends[receiver]>0;if(!legal)return null;}
   if(bounce===1||(!isServe&&bounce===0))samples.push({x:b.position.x,y:b.position.y,z:b.position.z,vx:b.velocity.x,vy:b.velocity.y,vz:b.velocity.z,time:predictedTime,bounces:bounce,landing});
  }
- const contact=selectContact(samples,{position:players[receiver].position,end:ends[receiver],speed:runSpeed(receiver),stamina:stamina[receiver],allowAir:!isServe});
+ flightSamples=samples;
+ const contact=selectContact(samples,{position:players[receiver].position,end:ends[receiver],speed:runSpeed(receiver),stamina:stamina[receiver],allowAir:!isServe,preference:receiver===0?humanPositionMode:'auto'});
  return contact?{...contact,receiver}:null;
 }
 function movePlayerTo(who,target,dt,speedFactor=1){
@@ -254,7 +258,7 @@ function launchStroke(who,type,power,perfect=false,pad=null,returnChoice=null){
  showShotSpeed(who,type,serving,perfect,physicalBall.velocity);
  sounds.hit({type,serving,perfect,speed:speedKmh(physicalBall.velocity)});
  if(!serving)energy.spend(who,cost(power,type)*(perfect?CFG.stamina.perfectCostMultiplier:1));lastHitter=who;bounces=0;decision=null;netTouched=false;elapsed=0;acc=0;phase='flight';plan=predict();
- recoveryTargets[1-who]=null;recoveryTargets[who]=recoveryPosition({end:ends[who],opponentContact:plan?.ball||shot.landing||target,strikePosition:players[who].position});recoveryDelay[who]=CFG.movement.recoveryDelay;updateContactGuide();
+ recoveryTargets[1-who]=null;recoveryTargets[who]=recoveryPosition({end:ends[who],opponentContact:plan?.ball||shot.landing||target,strikePosition:players[who].position,mode:who===0?humanPositionMode:'auto'});recoveryDelay[who]=CFG.movement.recoveryDelay;updateContactGuide();
  if(plan){
   rallyWindup={receiver:plan.receiver,started:false,choice:plan.receiver===1?{type:['top','flat','slice'][Math.floor(Math.random()*3)],power:CFG.ai.returnPowerMin+Math.random()*CFG.ai.returnPowerRange,perfect:false}:null};
  }
@@ -368,10 +372,23 @@ addEventListener('keydown',e=>{if(hold?.ready&&hold.mode==='rally'&&['ArrowLeft'
 function openMenu(){cancelHold();paused=true;$('startMenu').hidden=false;$('resume').hidden=!started||match.winner!==null;ui()}
 $('gamesSetting').value=String(CFG.match.gamesToWin);$('difficultySetting').value=CFG.match.difficulty;document.querySelector('input[name="scoring"][value="'+(CFG.match.noAd?'golden':'ad')+'"]').checked=true;
 $('resume').onclick=()=>{$('startMenu').hidden=true;paused=false;dirty=true;ui()};
-$('setup').onsubmit=e=>{e.preventDefault();cancelHold();match=new TennisMatch({gamesToWin:Number($('gamesSetting').value),noAd:document.querySelector('input[name="scoring"]:checked').value==='golden'});difficulty=$('difficultySetting').value;started=true;paused=false;ends=[1,-1];viewEnd();energy.reset();stamina=energy.values;displayedStamina=[CFG.stamina.full,CFG.stamina.full];trailingStamina=[CFG.stamina.full,CFG.stamina.full];turn=1;serveAttempt=1;pendingStroke=null;lastShotSpeed=null;$('shotSpeed').hidden=true;for(const p of players)p.userData.rig.swing=null;$('startMenu').hidden=true;$('sideMenu').hidden=true;prepareServe()};
+$('setup').onsubmit=e=>{e.preventDefault();cancelHold();match=new TennisMatch({gamesToWin:Number($('gamesSetting').value),noAd:document.querySelector('input[name="scoring"]:checked').value==='golden'});difficulty=$('difficultySetting').value;started=true;paused=false;humanPositionMode='baseline';ends=[1,-1];viewEnd();energy.reset();stamina=energy.values;displayedStamina=[CFG.stamina.full,CFG.stamina.full];trailingStamina=[CFG.stamina.full,CFG.stamina.full];turn=1;serveAttempt=1;pendingStroke=null;lastShotSpeed=null;$('shotSpeed').hidden=true;for(const p of players)p.userData.rig.swing=null;$('startMenu').hidden=true;$('sideMenu').hidden=true;prepareServe()};
 for(const node of document.querySelectorAll('[data-side]'))node.onclick=()=>{match.sideOverride=Number(node.dataset.side);$('sideMenu').hidden=true;prepareServe()};
 addEventListener('blur',()=>{cancelHold();if(phase==='flight'||phase==='ai'||phase==='stroke'){paused=true;say('已暂停 · P 继续');ui()}});
  document.addEventListener('visibilitychange',()=>{if(document.hidden){cancelHold();if(started&&['flight','ai','stroke'].includes(phase)){paused=true;ui()}}});
+$('positionMode').onclick=()=>{
+ if(!started||paused||phase==='end')return;
+ humanPositionMode=humanPositionMode==='net'?'baseline':'net';
+ recoveryTargets[0]=recoveryPosition({end:ends[0],strikePosition:human.position,mode:humanPositionMode,opponentContact:plan?.ball});recoveryDelay[0]=0;
+ // 使用本次来球的预测样本重新选择触球时机，不重置球的物理时间或已锁定的落点/力量。
+ if(phase==='flight'&&lastHitter===1){
+  const samples=flightSamples.filter(s=>s.time>elapsed).map(s=>({...s,time:s.time-elapsed,landing:s.landing?{...s.landing,time:s.landing.time-elapsed}:null}));
+  const contact=selectContact(samples,{position:human.position,end:ends[0],speed:runSpeed(0),stamina:stamina[0],allowAir:!isServe,preference:humanPositionMode});
+  plan=contact?{...contact,time:contact.time+elapsed,receiver:0}:null;
+  human.userData.rig.swing=null;rallyWindup=plan?{receiver:0,started:false,choice:null}:null;updateContactGuide();dirty=true;
+ }
+ say(humanPositionMode==='net'?'主动上网 · 优先截击/高压；接发球仍需先弹地':'回防底线 · 优先弹地后的正反手击球');ui();
+};
 $('courtMenu').onclick=openMenu;
 $('soundEnabled').checked=sounds.enabled;
 $('soundEnabled').onchange=()=>{sounds.setEnabled($('soundEnabled').checked);if(sounds.enabled)void sounds.unlock()};

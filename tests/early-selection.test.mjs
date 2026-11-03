@@ -14,7 +14,7 @@ function fixture(){
  const choice={type:'top',power:80,perfect:false,gauge:.75,target:{x:2,z:-9}};
  const strategy=new ReturnStrategy();strategy.afterOwnShot(choice);
  const vec=()=>({x:0,y:1,z:0,copy(){},set(){},setZero(){}});
- const ctx={CFG:CONFIG,serveVelocityError,serveAttempt:1,THREE:{MathUtils:{clamp:(n,a,b)=>Math.max(a,Math.min(b,n))}},returnStrategy:strategy,
+ const ctx={humanPositionMode:'baseline',CFG:CONFIG,serveVelocityError,serveAttempt:1,THREE:{MathUtils:{clamp:(n,a,b)=>Math.max(a,Math.min(b,n))}},returnStrategy:strategy,
   hold:{id:4,ready:true,chargeStart:1234,mode:'rally'},cancelled:0,retiredPointerId:null,
   isServe:false,flightIsServe:false,match:{serviceSide:0},ends:[1,-1],selected:'top',gauge:.75,aim:choice.target,
   physicalBall:{position:vec(),velocity:vec(),angularVelocity:vec(),force:vec(),torque:vec()},stamina:[100,100],

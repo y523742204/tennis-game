@@ -31,5 +31,6 @@ test('pause freezes running joints and stroke timing; stopping settles smoothly'
   assert.equal(r.swing.time,0);
   for(let i=0;i<180;i++)updatePlayer(p,1/60);
   assert.ok(r.velocity.length()<.001);
-  assert.ok(Math.abs(r.leftLeg.hip.rotation.z-.09)<.001);
+  assert.ok(Math.abs(r.leftLeg.foot.x+.16)<.001);
+  assert.ok(Math.abs(r.leftLeg.foot.z)<.001);
 });

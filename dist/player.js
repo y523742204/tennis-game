@@ -1,3 +1,4 @@
+import {chooseStance,footTargets,legAngles} from './footwork.js';
 import {strokePose,splitStepPose} from './stroke-motion.js';
 import {CONFIG as CFG,READY_POSE} from './config.js';
 import * as THREE from './vendor/three.module.js';
@@ -29,7 +30,7 @@ export function createPlayer(scene,color,z,accent) {
   const cap=mesh(head,new THREE.SphereGeometry(.352,24,16,0,Math.PI*2,0,Math.PI/2),trim,0,.055,0);
   const visor=sphere(head,.24,trim,0,.07,-.3);visor.scale.set(1.35,.12,1);
   mesh(head,new THREE.BoxGeometry(.1,.05,.02),white,0,.18,-.326);
-  function leg(x){const hip=new THREE.Group();hip.position.set(x,.84,0);body.add(hip);capsule(hip,.105,.23,skin,0,-.18,0);const knee=new THREE.Group();knee.position.y=-.35;hip.add(knee);sphere(knee,.106,skin,0,0,0);capsule(knee,.082,.22,skin,0,-.16,0);capsule(knee,.088,.09,white,0,-.29,0);const shoe=capsule(knee,.105,.14,white,0,-.37,-.07);shoe.rotation.x=Math.PI/2;mesh(knee,new THREE.BoxGeometry(.18,.045,.32),trim,0,-.43,-.07);return {hip,knee}}
+  function leg(x){const hip=new THREE.Group();hip.position.set(x,.84,0);body.add(hip);capsule(hip,.105,.23,skin,0,-.18,0);const knee=new THREE.Group();knee.position.y=-.35;hip.add(knee);sphere(knee,.106,skin,0,0,0);capsule(knee,.082,.22,skin,0,-.16,0);capsule(knee,.088,.09,white,0,-.29,0);const ankle=new THREE.Group();ankle.position.y=-.43;knee.add(ankle);const shoe=capsule(ankle,.105,.14,white,0,.06,-.07);shoe.rotation.x=Math.PI/2;mesh(ankle,new THREE.BoxGeometry(.18,.045,.32),trim,0,0,-.07);return {hip,knee,ankle,foot:new THREE.Vector3(x,.06,0)}}
   const leftLeg=leg(-.16),rightLeg=leg(.16);
   function arm(x){const shoulder=new THREE.Group();shoulder.position.set(x,.18,0);chest.add(shoulder);sphere(shoulder,.14,shirt,0,-.05,0);capsule(shoulder,.093,.18,skin,0,-.19,0);const elbow=new THREE.Group();elbow.position.y=-.34;shoulder.add(elbow);sphere(elbow,.095,skin,0,0,0);capsule(elbow,.078,.19,skin,0,-.17,0);capsule(elbow,.085,.035,trim,0,-.27,0);const hand=new THREE.Group();hand.position.y=-.35;elbow.add(hand);sphere(hand,.09,skin,0,-.025,0);return {shoulder,elbow,hand}}
   const rightArm=arm(.34),leftArm=arm(-.34);
@@ -45,7 +46,7 @@ export function createPlayer(scene,color,z,accent) {
 }
 const READY=READY_POSE;
 export function beginStroke(player,{type='flat',backhand=false,serve=false,pad={x:0,y:0}}={}){
-  const rig=player.userData.rig;rig.swing={type,backhand,serve,pad,time:0,duration:serve?CFG.animation.serveDuration:CFG.animation.strokeDuration,contact:serve?CFG.animation.serveContact:CFG.animation.contact,hit:false};rig.trailPoints=[];
+  const rig=player.userData.rig;rig.swing={type,backhand,serve,pad,stance:chooseStance({type,backhand,serve,lateral:rig.velocity.x}),time:0,duration:serve?CFG.animation.serveDuration:CFG.animation.strokeDuration,contact:serve?CFG.animation.serveContact:CFG.animation.contact,hit:false};rig.trailPoints=[];
 }
 export function updatePlayer(player,dt,{end=1,moving=false,serveReady=false,ready=false,paused=false}={}){
   if(paused){player.userData.rig.last.copy(player.position);return false}
@@ -53,11 +54,11 @@ export function updatePlayer(player,dt,{end=1,moving=false,serveReady=false,read
   let split={lift:0,bend:0,width:0};
   if(r.splitStep!=null){r.splitStep+=dt;split=splitStepPose(r.splitStep);if(r.splitStep>=CFG.animation.splitDuration)r.splitStep=null}
   const displacement=player.position.clone().sub(r.last);r.last.copy(player.position);
-  const targetVelocity=moving&&dt>0&&displacement.length()<CFG.animation.teleportDistance?displacement.divideScalar(dt):new THREE.Vector3();
+  const targetVelocity=moving&&dt>0&&displacement.length()<CFG.animation.teleportDistance?displacement.clone().divideScalar(dt):new THREE.Vector3();
   r.velocity.lerp(targetVelocity,1-Math.exp(-dt*CFG.animation.velocityDamping));
   const speed=r.velocity.length(),stride=THREE.MathUtils.clamp(speed/CFG.animation.fullStrideSpeed,0,1),running=stride>CFG.animation.runningThreshold;
   const lateral=THREE.MathUtils.clamp(r.velocity.x*end/CFG.animation.fullStrideSpeed,-1,1),forward=THREE.MathUtils.clamp(-r.velocity.z*end/CFG.animation.fullStrideSpeed,-1,1);
-  r.gait+=dt*(CFG.animation.gaitBase+stride*CFG.animation.gaitSpeed)*Math.min(1,stride*CFG.animation.gaitFade);
+  if(displacement.length()<CFG.animation.teleportDistance)r.gait+=displacement.length()/Math.max(.1,CFG.animation.stepLength*(.45+.55*stride))*Math.PI*2;
   player.rotation.y=end===1?0:Math.PI;
   let p={...READY},contact=false,s=r.swing;
   if(s&&!paused){s.time+=dt;const u=Math.min(s.time/s.duration,1);p=strokePose(s.type,s.backhand,s.serve,u,s.pad);
@@ -76,12 +77,18 @@ export function updatePlayer(player,dt,{end=1,moving=false,serveReady=false,read
   rot(r.chest,[p.pitch||0,p.yaw||0,0]);r.head.rotation.y=mix(r.head.rotation.y,-(p.yaw||0)*(s&&s.time/s.duration<s.contact+CFG.animation.contactHold?1:.5),damp);
   rot(r.rightArm.shoulder,p.right);rot(r.leftArm.shoulder,p.left);rot(r.rightArm.hand,p.wrist||[0,0,0]);
   r.rightArm.elbow.rotation.x=mix(r.rightArm.elbow.rotation.x,p.elbowR,damp);r.leftArm.elbow.rotation.x=mix(r.leftArm.elbow.rotation.x,p.elbowL,damp);
-  for(const [leg,sign] of [[r.leftLeg,1],[r.rightLeg,-1]]){
-    const step=gait*sign,bend=(p.bend||0)+split.bend,transfer=p.transfer||0;
-    leg.hip.position.x=mix(leg.hip.position.x,sign*(-.16-(s?CFG.animation.stanceWidth:0)-split.width),damp);
-    leg.hip.position.z=mix(leg.hip.position.z,sign*transfer*CFG.animation.weightDepth,damp);
-    rot(leg.hip,[step*(.18+Math.abs(forward)*.5)-bend*.5,(p.hipYaw||0)*.5,sign*.09+step*lateral*.45]);
-    rot(leg.knee,[Math.max(0,-step)*.85+bend,0,0]);
+  const u=s?Math.min(s.time/s.duration,1):0;
+  const setup=s?Math.min(u/CFG.animation.coil,1)*Math.min((1-u)/(1-CFG.animation.recover),1):0;
+  const stanceAmount=Math.max(0,setup)*(1-stride*CFG.animation.strideDuringStroke);
+  const feet=footTargets({phase:r.gait,speed,vx:r.velocity.x*end,vz:r.velocity.z*end,stance:s?.stance,amount:stanceAmount,backhand:s?.backhand,split:split.width});
+  for(const [i,leg] of [r.leftLeg,r.rightLeg].entries()){
+    const foot=feet[i],sign=i===0?-1:1;
+    leg.hip.position.set(sign*.16,.84,0);
+    const target=new THREE.Vector3(foot.x,.06+foot.lift+split.lift+(p.lift||0),foot.z);
+    leg.foot.lerp(target,1-Math.exp(-dt*CFG.animation.footDamping));
+    const angles=legAngles(leg.foot.x-leg.hip.position.x-r.body.position.x,leg.foot.y-.84-r.body.position.y,leg.foot.z-r.body.position.z);
+    rot(leg.hip,[angles.hip,0,angles.roll]);rot(leg.knee,[angles.knee,0,0]);
+    rot(leg.ankle,[angles.ankle,foot.yaw,-angles.roll]);
   }
   const progress=s?s.time/s.duration:0;
   r.trail.visible=!!s&&progress>(s.serve?CFG.animation.serveTrailStart:CFG.animation.strokeTrailStart)&&progress<(s.serve?CFG.animation.serveTrailEnd:CFG.animation.strokeTrailEnd);

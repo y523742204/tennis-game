@@ -34,6 +34,7 @@ npm start
 - 本地合成击球、Perfect、弹地、触网、得分音效；首次点击或按键后启用，可在比赛设置关闭。
 - 挥拍采用参考真实技术顺序的程序化骨骼动画：正手整体转身、转髋带肩、低到高挥拍与跨身随挥；单反展开手臂并用另一手平衡；截击短引拍；发球和高压包含屈膝、拍头下沉、伸臂和随挥。连续插值避免关键帧间逐段停顿，击球时配合重心转移、站距变化和目光保持。此实现是手工建模的动作，不是动作捕捉数据。
 - 对手出拍时接球方自动垫步：小跳、分腿、屈膝落地后恢复准备姿态；双方均有，不改变移动速度或体力规则。切削采用独立的高位引拍、开放拍面、向前下切及展开随挥。发球增加抛球阶段，球先上升到顶点再下降至触球高度。
+- 移动脚步按实际位移推进，分为支撑与摆腿阶段；横向调整采用较低抬脚的小碎步，前后跑动采用较高抬脚。脚踝补偿小腿倾角，停止时平滑收脚。正手及横向追球优先开放式站位；站稳后的反手、切削、截击和发球采用前后错开的关闭式站位，反手方向自动镜像。站位在每次引拍时选择，击球期间平滑建立、随挥后恢复。
 
 ## 手机与平板
 
@@ -61,6 +62,7 @@ npm test
 
 - `dist/`：可直接部署的静态网站。
 - `dist/player.js`：卡通球员和关节动画。
+- `dist/footwork.js`：开放/关闭式站位选择、位移驱动步态与腿部关节求解。
 - `dist/stroke-motion.js`：连续挥拍插值与分阶段发球动作；姿态及时间参数仍集中在 `config.js`。
 - `dist/flight.js`：旋转与空气作用力。
 - `dist/tactics.js`：截击、高压、弹跳后击球点与回位。
@@ -97,6 +99,8 @@ npm test
 动作调参：`animation.strokeDamping` 控制挥拍跟随速度，`strideDuringStroke` 控制击球时跑动摆幅，`weightDepth/stanceWidth` 控制重心与站距，`serveTrophy/serveDrop/serveFinish` 控制发球阶段（保持 `0 < serveTrophy < serveDrop < serveContact < serveFinish < 1`）。动作设计参考 [USTA 正手整体转身教学](https://www.usta.com/en/home/improve/tips-and-instruction/national/improve-your-tennis-game--get-your-forehand-flowing.html)；所有角度为当前卡通骨骼上的手工适配值。
 
 垫步由 `animation.splitDuration/splitHeight/splitBend/splitWidth` 调整；发球抛球由 `serveToss/serveTossPeak/serveTossExtra` 调整，保持 `0 < serveToss < serveTrophy` 且 `serveToss < serveTossPeak < serveContact`。切削关节姿态位于 `strokePoses` 的独立切削分支。
+
+脚步由 `animation.stepLength/stepLift/shuffleLift/footPlantRatio` 调整步长、抬脚与支撑比例；`openWidth/closedWidth/closedDepth` 调整站距和前后错位；`openLateralSpeed` 控制横向追球时采用开放式的阈值；`footDamping` 控制脚步过渡速度。动画不改变球员实际移速和体力消耗。
 
 `dist/index.html` 的 import map 为本地模块统一添加缓存版本。部署新代码时应更新其中的版本后缀及入口脚本后缀，避免浏览器混用新旧模块。
 

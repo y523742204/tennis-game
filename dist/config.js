@@ -147,6 +147,11 @@ export const CONFIG={
     contactHold:.08, // 转头视线在触球后保持的动作比例
     splitDuration:.34,splitHeight:.09,splitBend:.25,splitWidth:.08, // 对手出拍时垫步：时长、腾空、落地屈膝、双脚展开
     serveToss:.16,serveTossPeak:.48,serveTossExtra:.65, // 发球抛球动作时刻、球到顶点时刻、顶点高于触球点的米数
+    stepLength:.72,stepLift:.12,shuffleLift:.055, // 每步周期位移、跑步/横移抬脚高度（米）
+    footPlantRatio:.6, // 每个步态周期的支撑阶段比例
+    openWidth:.34,closedWidth:.20,closedDepth:.28, // 开放式半站距、关闭式半站距与前后错位（米）
+    openLateralSpeed:1.2, // 横向追球超过此速度优先开放式，米/真实秒
+    footDamping:24, // 脚步目标过渡速度
     fullStrideSpeed:5, // 达到完整步幅的速度
     gaitBase:7,gaitSpeed:10,gaitFade:4, // 步频基础值/速度增量/低速淡出
     teleportDistance:1, // 单帧移动超过该值视为换位，不播放跑动

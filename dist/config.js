@@ -145,6 +145,8 @@ export const CONFIG={
     weightDepth:.18,stanceWidth:.1, // 击球重心前后转移、站距加宽（米）
     serveTrophy:.34,serveDrop:.57,serveFinish:.86, // 发球奖杯姿势、拍头下沉、随挥关键时刻
     contactHold:.08, // 转头视线在触球后保持的动作比例
+    splitDuration:.34,splitHeight:.09,splitBend:.25,splitWidth:.08, // 对手出拍时垫步：时长、腾空、落地屈膝、双脚展开
+    serveToss:.16,serveTossPeak:.48,serveTossExtra:.65, // 发球抛球动作时刻、球到顶点时刻、顶点高于触球点的米数
     fullStrideSpeed:5, // 达到完整步幅的速度
     gaitBase:7,gaitSpeed:10,gaitFade:4, // 步频基础值/速度增量/低速淡出
     teleportDistance:1, // 单帧移动超过该值视为换位，不播放跑动
@@ -204,12 +206,21 @@ export function servePoses(pad={x:0,y:0}){
   const drop={...trophy,right:[2.45,-.6,.65],left:[2.2,0,-.35],elbowR:1.9,wrist:[-1.1,-.4,.15],hipYaw:-.1,yaw:-.65,bend:.32,pitch:-.22,transfer:-.2};
   const hit={...R,right:[3.02,.1,.2],left:[.85,.2,-.4],elbowR:.12,elbowL:.9,wrist:[-.05-pad.y*.25,pad.x*.45,.05],hipYaw:.4,yaw:.25,pitch:.08,bend:.05,transfer:1,lift:.16,roll:.08};
   const finish={...R,right:[1.15,.5,-.75],left:[.5,0,-.4],elbowR:.65,wrist:[.5,.75,.1],hipYaw:.65,yaw:.9,pitch:.3,bend:.25,weight:-.08,transfer:.7};
-  return {trophy,drop,hit,finish};
+  const toss={...R,right:[.4,-.5,.55],left:[2.15,0,-.15],elbowR:.8,elbowL:.08,yaw:-.55,hipYaw:-.35,bend:.22,transfer:-.6};
+  return {toss,trophy,drop,hit,finish};
 }
 // 分阶段姿态：coil 引拍、drive 发力、contactPose 触球、finish 随挥。
 // backhand 控制反手；slice/top 控制切削/上旋，其余为平击。
 export function strokePoses(type,backhand){
   const R=READY_POSE,side=backhand?-1:1,slice=type==='slice',top=type==='top';
+  if(slice){
+    // 切削独立动作：高位拍头、略开放拍面、向前下方切入，非持拍手反向展开。
+    const coil={...R,right:backhand?[1.95,.25,-.85]:[1.9,-.45,.9],left:backhand?[1.4,-.1,.2]:[1.2,.1,-.7],elbowR:.95,elbowL:.5,wrist:[.35,-.15,0],yaw:-side*.95,hipYaw:-side*.45,bend:.3,transfer:-.8};
+    const drive={...coil,right:backhand?[1.65,.05,-.8]:[1.65,-.15,.8],elbowR:.55,hipYaw:side*.05,yaw:-side*.5,transfer:-.1};
+    const contactPose={...R,right:backhand?[1.25,-.05,-.65]:[1.25,.1,.6],left:backhand?[.65,-.3,1.05]:[.8,.2,-.6],elbowR:.2,elbowL:.65,wrist:[.4,0,0],yaw:side*.08,hipYaw:side*.25,bend:.25,transfer:1};
+    const finish={...contactPose,right:backhand?[.85,-.2,-.9]:[.85,.35,.5],left:backhand?[.5,-.4,1.15]:[.6,.2,-.75],elbowR:.3,wrist:[.3,0,0],yaw:side*.45,hipYaw:side*.35,bend:.18,transfer:.7};
+    return {coil,drive,contactPose,finish};
+  }
   // 右手持拍：正手在身体右侧触球；单反在左前方，非持拍手反向展开平衡。
   if(type==='smash'){
     const coil={...R,right:[2,-.5,.9],left:[2.75,0,-.2],elbowR:1.65,elbowL:.15,wrist:[-.8,-.2,.1],yaw:-.7,hipYaw:-.4,pitch:-.15,bend:.4,transfer:-.7};

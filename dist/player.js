@@ -1,4 +1,4 @@
-import {strokePose} from './stroke-motion.js';
+import {strokePose,splitStepPose} from './stroke-motion.js';
 import {CONFIG as CFG,READY_POSE} from './config.js';
 import * as THREE from './vendor/three.module.js';
 const mix=THREE.MathUtils.lerp;
@@ -50,6 +50,8 @@ export function beginStroke(player,{type='flat',backhand=false,serve=false,pad={
 export function updatePlayer(player,dt,{end=1,moving=false,serveReady=false,ready=false,paused=false}={}){
   if(paused){player.userData.rig.last.copy(player.position);return false}
   const r=player.userData.rig;r.clock+=paused?0:dt;
+  let split={lift:0,bend:0,width:0};
+  if(r.splitStep!=null){r.splitStep+=dt;split=splitStepPose(r.splitStep);if(r.splitStep>=CFG.animation.splitDuration)r.splitStep=null}
   const displacement=player.position.clone().sub(r.last);r.last.copy(player.position);
   const targetVelocity=moving&&dt>0&&displacement.length()<CFG.animation.teleportDistance?displacement.divideScalar(dt):new THREE.Vector3();
   r.velocity.lerp(targetVelocity,1-Math.exp(-dt*CFG.animation.velocityDamping));
@@ -66,7 +68,7 @@ export function updatePlayer(player,dt,{end=1,moving=false,serveReady=false,read
   const gait=Math.sin(r.gait)*stride*(s?CFG.animation.strideDuringStroke:1),hop=(1-Math.cos(r.gait*2))*CFG.animation.hop*stride+Math.sin(r.clock*2)*CFG.animation.idleHop*(1-stride);
   if(running&&!s){p={...p,right:[1.0+gait*.5,-.15,-.3],left:[.8-gait*.5,.15,.3],pitch:.16,yaw:gait*.08}}
   const damp=1-Math.exp(-dt*(s?CFG.animation.strokeDamping:CFG.animation.jointDamping)),rot=(object,values)=>{for(let i=0;i<3;i++){const axis=['x','y','z'][i];object.rotation[axis]=mix(object.rotation[axis],values[i],damp)}};
-  r.body.position.y=mix(r.body.position.y,hop-(p.bend||0)*.14+(p.lift||0),damp);
+  r.body.position.y=mix(r.body.position.y,hop-(p.bend||0)*.14+(p.lift||0)+split.lift-split.bend*.14,damp);
   r.body.position.x=mix(r.body.position.x,(p.weight||0)+gait*.018,damp);
   r.body.position.z=mix(r.body.position.z,-(p.transfer||0)*CFG.animation.weightDepth,damp);
   rot(r.body,[forward*.07,0,-lateral*.1+gait*.025+(p.roll||0)]);
@@ -75,8 +77,8 @@ export function updatePlayer(player,dt,{end=1,moving=false,serveReady=false,read
   rot(r.rightArm.shoulder,p.right);rot(r.leftArm.shoulder,p.left);rot(r.rightArm.hand,p.wrist||[0,0,0]);
   r.rightArm.elbow.rotation.x=mix(r.rightArm.elbow.rotation.x,p.elbowR,damp);r.leftArm.elbow.rotation.x=mix(r.leftArm.elbow.rotation.x,p.elbowL,damp);
   for(const [leg,sign] of [[r.leftLeg,1],[r.rightLeg,-1]]){
-    const step=gait*sign,bend=p.bend||0,transfer=p.transfer||0;
-    leg.hip.position.x=mix(leg.hip.position.x,sign*(-.16-(s?CFG.animation.stanceWidth:0)),damp);
+    const step=gait*sign,bend=(p.bend||0)+split.bend,transfer=p.transfer||0;
+    leg.hip.position.x=mix(leg.hip.position.x,sign*(-.16-(s?CFG.animation.stanceWidth:0)-split.width),damp);
     leg.hip.position.z=mix(leg.hip.position.z,sign*transfer*CFG.animation.weightDepth,damp);
     rot(leg.hip,[step*(.18+Math.abs(forward)*.5)-bend*.5,(p.hipYaw||0)*.5,sign*.09+step*lateral*.45]);
     rot(leg.knee,[Math.max(0,-step)*.85+bend,0,0]);

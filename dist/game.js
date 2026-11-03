@@ -1,3 +1,4 @@
+import {serveTossHeight} from './stroke-motion.js';
 import {courtDimensions,clampPlayerTarget} from './court.js';
 import {serveVelocityError} from './accuracy.js';
 import {solveShot,speedKmh} from './shot.js';
@@ -196,6 +197,7 @@ function recoverPlayers(dt,excluded=null){
 }
 function viewEnd(){if(screenLayout)fitCourtCamera(camera,screenLayout,ends[0])}
 function prepareServe(){
+ for(const p of players)p.userData.rig.splitStep=null;
  clearReturn();cancelHold();plan=null;recoveryTargets=[null,null];recoveryDelay=[0,0];contactGuide.visible=false;elapsed=0;acc=0;decision=null;bounces=0;netTouched=false;isServe=true;selected='flat';serveSpin={x:0,y:0};pendingStroke=null;
  if(match.decidingPoint&&match.sideOverride===null){
   if(match.server===1){phase='side';$('sideMenu').hidden=false;say('金球决胜：由接发方选择一区或二区');ui();return}
@@ -244,7 +246,7 @@ function strike(who,type,power,perfect=false){
 function launchStroke(who,type,power,perfect=false,pad=null,returnChoice=null){
  if(who===0){cancelHold();clearReturn()}else rallyWindup=null;
  const serving=isServe,sign=ends[who]*(match.serviceSide===0?1:-1);
- flightIsServe=serving;
+ flightIsServe=serving;players[1-who].userData.rig.splitStep=0;
  let target=who===0?{...(returnChoice?.target||aim)}:serving?{x:-sign*(CFG.ai.serveXMin+Math.random()*CFG.ai.serveXRange),z:-ends[who]*(CFG.ai.serveDepthMin+Math.random()*CFG.ai.serveDepthRange)}:{x:(Math.random()-.5)*CFG.ai.returnWidth,z:-ends[who]*(CFG.ai.returnDepthMin+Math.random()*CFG.ai.returnDepthRange)};
  if(who===0&&!perfect){target.x+=(Math.random()-.5)*Math.abs((returnChoice?.gauge??gauge)-.5)*CFG.shot.timingScatter;target.z+=(power-CFG.shot.neutralPower)*CFG.shot.powerDepthOffset}
  target=fatigueTarget(target,stamina[who]);
@@ -357,7 +359,7 @@ function updateVisuals(now,dt){
  if(hold?.ready&&!paused){placeTargetPower();gauge=(1-Math.cos((now-hold.chargeStart)*CFG.input.chargeRate))/2;$('needle').style.bottom=(gauge*100)+'%';$('powerValue').textContent=Math.round(CFG.input.minimumPower+gauge*CFG.input.powerRange)+'%';$('timingText').textContent=Math.abs(gauge-CFG.input.perfectCenter)<=CFG.input.perfectHalfWidth?'✦ PERFECT':'金色区域松手'}
  ball.position.copy(physicalBall.position);ball.quaternion.copy(physicalBall.quaternion);
  if(isServe&&['choose','ai'].includes(phase))ball.position.y=1.3;
- if(pendingStroke?.serving){const u=strokeProgress(players[pendingStroke.who])||0;ball.position.y=1.3+(CFG.shot.serveContactHeight-1.3)*Math.sin(Math.min(u/CFG.animation.serveContact,1)*Math.PI/2);}
+ if(pendingStroke?.serving){const u=strokeProgress(players[pendingStroke.who])||0;ball.position.y=serveTossHeight(u);}
 }
 function next(){if(phase==='end'){openMenu();return}if(['point','fault'].includes(phase)&&!paused)prepareServe()}
 canvas.addEventListener('click',e=>{if(e.isPrimary===false)return;if(ignoreNextClick){ignoreNextClick=false;return}if(paused&&$('startMenu').hidden&&$('sideMenu').hidden){togglePause();return}if(['point','fault','end'].includes(phase))next()});

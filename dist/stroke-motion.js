@@ -25,9 +25,19 @@ export function strokePose(type,backhand,serve,u,pad={x:0,y:0}){
  const a=CFG.animation,R=READY_POSE;
  if(serve){
   // 抛球/屈膝 -> 奖杯姿势 -> 肘部领先、拍头下沉 -> 向上伸展 -> 前臂旋转与跨身随挥。
-  const {trophy,drop,hit,finish}=servePoses(pad);
-  return sampleFrames([[0,R],[a.serveTrophy,trophy],[a.serveDrop,drop],[a.serveContact,hit],[a.serveFinish,finish],[1,R]],u);
+  const {toss,trophy,drop,hit,finish}=servePoses(pad);
+  return sampleFrames([[0,R],[a.serveToss,toss],[a.serveTrophy,trophy],[a.serveDrop,drop],[a.serveContact,hit],[a.serveFinish,finish],[1,R]],u);
  }
  const {coil,drive,contactPose,finish}=strokePoses(type,backhand);
  return sampleFrames([[0,R],[a.coil,coil],[a.drive,drive],[a.contact,contactPose],[a.finish,finish],[a.recover,{...finish,bend:.16}],[1,R]],u);
+}
+export function splitStepPose(time){
+ const a=CFG.animation,u=clamp(time/a.splitDuration,0,1);
+ return {lift:a.splitHeight*Math.sin(Math.PI*Math.min(u/.7,1)),bend:a.splitBend*Math.sin(Math.PI*clamp((u-.4)/.6,0,1))**2,width:a.splitWidth*Math.sin(Math.PI*u)};
+}
+export function serveTossHeight(u){
+ const a=CFG.animation,base=1.3,hit=CFG.shot.serveContactHeight,peak=hit+a.serveTossExtra;
+ if(u<=a.serveTossPeak){const t=clamp(u/a.serveTossPeak,0,1);return base+(peak-base)*(2*t-t*t)}
+ const t=clamp((u-a.serveTossPeak)/(a.serveContact-a.serveTossPeak),0,1);
+ return peak-(peak-hit)*t*t;
 }

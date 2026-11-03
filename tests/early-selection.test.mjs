@@ -47,6 +47,8 @@ test('own launch opens the next selection immediately with no stale lock',()=>{
  vm.runInContext("launchStroke(0,'flat',65)",ctx);
  assert.equal(ctx.phase,'flight');assert.equal(ctx.returnStrategy.active,true);assert.equal(ctx.returnStrategy.locked,null);
  assert.equal(ctx.hold,null);assert.equal(ctx.selected,'flat');
+ assert.equal(ctx.players[1].userData.rig.splitStep,0);
+ assert.equal(ctx.players[0].userData.rig.splitStep,undefined);
 });
 test('first and second serves spend no shot stamina, rallies still do',()=>{
  for(const serving of [true,false])for(const attempt of [1,2]){

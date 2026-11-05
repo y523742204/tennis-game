@@ -126,7 +126,7 @@ export const CONFIG={
     backhandOffset:2.2, // 当前角色均为右手持拍，向对手反手侧施压
     returnPowerJitter:3, // 战术确定后的小幅执行波动
     rescueSpeedMultiplier:1.38,rescueStaminaCost:16,rescueMinimumStamina:24, // 差一点够不到时消耗体力冲刺救球
-    approachContactDepth:7,approachOpponentOffset:1.5,approachMinimumStamina:42, // 短球且对手失位时主动上网
+    approachLandingDepth:7.4,approachContactDepth:8.2,approachOpponentOffset:.75,approachMinimumStamina:32, // 短落点或前场击球、对手略失位时主动上网
   },
   tactics:{
     attackDepth:3.2,baselineDepth:11.2, // 主动上网/回防底线的站位纵深，距网米数

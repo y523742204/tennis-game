@@ -10,3 +10,9 @@ test('net rush accelerates forward movement with a finite budget and normal run 
  for(let i=0;i<30;i++)vm.runInContext('movePlayerTo(0,{x:0,z:3.2},.1)',ctx);
  assert.equal(p.z,3.2);assert.equal(ctx.netRushRemaining,0);
 });
+
+test('computer net mode receives the same finite forward sprint boost',()=>{
+ const p={x:0,z:-11},ctx={CFG,clampPlayerTarget,players:[{}, {position:p}],humanPositionMode:'baseline',cpuPositionMode:'net',netRushRemaining:0,cpuNetRushRemaining:10,ends:[1,-1],runSpeed:()=>6,spent:0};ctx.spendEnergy=(who,n)=>ctx.spent+=n;
+ vm.createContext(ctx);vm.runInContext(move,ctx);vm.runInContext('movePlayerTo(1,{x:0,z:-3.2},.1)',ctx);
+ assert.ok(Math.abs(p.z-(-9.92))<1e-10);assert.ok(ctx.cpuNetRushRemaining<10);assert.ok(ctx.spent>0);
+});

@@ -107,6 +107,9 @@ test('well prepared groundstrokes can be Perfect, while pressured rescues cannot
 test('short balls invite an approach only with opponent displacement and enough stamina',()=>{
   const s=situation();s.remaining=.8;s.contact.ball.z=-5;s.opponent.x=2;
   assert.equal(chooseComputerReturn(s,()=>.5).approach,true);
+  const shortLanding={...s,contact:{...s.contact,ball:{...s.contact.ball,z:-9},landing:{x:0,z:-6.8}}};
+  assert.equal(chooseComputerReturn(shortLanding,()=>.5).approach,true);
+  assert.equal(chooseComputerReturn({...shortLanding,opponent:{x:.4,z:10}},()=>.5).approach,false);
   assert.equal(chooseComputerReturn({...s,opponent:{x:0,z:10}},()=>.5).approach,false);
   assert.equal(chooseComputerReturn({...s,stamina:30},()=>.5).approach,false);
 });

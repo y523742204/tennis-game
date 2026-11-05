@@ -43,7 +43,9 @@ export function chooseComputerReturn({end,position,opponent,contact,remaining,sp
   }
   type=contact.kind||type;
   const perfect=!pressured&&!contact.kind&&setup>=p.perfectSetup&&random()<p.perfectChance;
-  const approach=!pressured&&!contact.kind&&ball.z*end<a.approachContactDepth&&Math.abs(opponent.x)>a.approachOpponentOffset&&stamina>=a.approachMinimumStamina;
+  const landingDepth=(contact.landing?.z??ball.z)*end;
+  const shortBall=landingDepth<a.approachLandingDepth||ball.z*end<a.approachContactDepth;
+  const approach=!pressured&&!contact.kind&&shortBall&&Math.abs(opponent.x)>a.approachOpponentOffset&&stamina>=a.approachMinimumStamina;
   const scatter=p.scatter;
   const margin=CFG.shot.aimLineMargin;
   const target={

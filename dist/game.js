@@ -54,7 +54,7 @@ const energy=new Stamina();
 const sounds=new TennisAudio();
 let match=new TennisMatch(),difficulty=CFG.match.difficulty,phase='menu',started=false,paused=false,stamina=energy.values,ends=[1,-1];
 let lastHitter=0,bounces=0,decision=null,isServe=true,serveAttempt=1,netTouched=false,flightIsServe=true;
-let humanPositionMode='baseline',flightSamples=[],netRushRemaining=0;
+let humanPositionMode='baseline',flightSamples=[],netRushRemaining=0,cpuNetRushRemaining=0,cpuTacticState='baseline';
 let plan=null,elapsed=0,acc=0,aiWait=0,turn=1,aim={x:-2,z:-4},selected='top',gauge=.5,dirty=true,hold=null;
 const customCharacters={human:createCustomCharacter('human'),cpu:createCustomCharacter('cpu')};
 const draftCharacterIds={human:DEFAULT_CHARACTER,cpu:DEFAULT_CHARACTER};
@@ -186,6 +186,8 @@ function ui(){
  $('courtMenu').hidden=!started||!$('startMenu').hidden||!$('sideMenu').hidden;
  $('pointHeading').textContent=match.tieBreak?'TB':'分';
  $('scoreStatus').textContent=match.winner!==null?'比赛结束':match.tieBreak?'抢七':match.decidingPoint?'金球':match.points.every(p=>p>=3)?(match.points[0]===match.points[1]?'平分':'占先'):'第 '+(match.games[0]+match.games[1]+1)+' 局';
+ const cpuStatus=$('cpuTacticStatus'),cpuState=cpuPositionMode==='net'?(cpuNetRushRemaining>0?'rush':'net'):cpuTacticState==='retreat'?'retreat':'baseline';
+ cpuStatus.className='cpu-tactic '+cpuState;cpuStatus.textContent={baseline:'电脑 · 底线',rush:'电脑 · 冲刺上网',net:'电脑 · 网前',retreat:'电脑 · 回防'}[cpuState];
  let status=(match.server===0?'你':'电脑')+'发球 · '+(serveAttempt===1?'一发':'二发')+' · '+(match.serviceSide===0?'右区':'左区');
  if(choosingReturn())status=returnStrategy.locked?'已锁定 · '+({top:'上旋',flat:'平击',slice:'切削'}[returnStrategy.locked.type]):'长按预选下一拍';
  if(paused)status='暂停 · 点击继续';
@@ -232,24 +234,25 @@ function predict(){
 }
 function movePlayerTo(who,target,dt,speedFactor=1){
  if(!target)return true;target=clampPlayerTarget(target);const p=players[who].position,dx=target.x-p.x,dz=target.z-p.z,distance=Math.hypot(dx,dz);
- const rush=who===0&&humanPositionMode==='net'&&netRushRemaining>0&&dz*ends[0]<0&&Math.abs(p.z)>CFG.tactics.attackDepth;
+ const rushBudget=who===0?netRushRemaining:cpuNetRushRemaining;
+ const rush=(who===0?humanPositionMode:cpuPositionMode)==='net'&&rushBudget>0&&dz*ends[who]<0&&Math.abs(p.z)>CFG.tactics.attackDepth;
  const normal=runSpeed(who)*speedFactor*dt;
- const boosted=rush?Math.min(normal*CFG.movement.netRushMultiplier,netRushRemaining):0;
+ const boosted=rush?Math.min(normal*CFG.movement.netRushMultiplier,rushBudget):0;
  const move=Math.min(distance,rush?Math.max(normal,boosted):normal);
- if(rush)netRushRemaining=Math.max(0,netRushRemaining-move);if(distance>.001){p.x+=dx/distance*move;p.z+=dz/distance*move;spendEnergy(who,move*CFG.stamina.runCostPerMeter)}if(who===0&&Math.abs(p.z)<=CFG.tactics.attackDepth)netRushRemaining=0;return distance-move<CFG.movement.arrivalTolerance;
+ if(rush){if(who===0)netRushRemaining=Math.max(0,netRushRemaining-move);else cpuNetRushRemaining=Math.max(0,cpuNetRushRemaining-move)}if(distance>.001){p.x+=dx/distance*move;p.z+=dz/distance*move;spendEnergy(who,move*CFG.stamina.runCostPerMeter)}if(Math.abs(p.z)<=CFG.tactics.attackDepth){if(who===0)netRushRemaining=0;else cpuNetRushRemaining=0}return distance-move<CFG.movement.arrivalTolerance;
 }
 function recoverPlayers(dt,excluded=null){
  for(let who=0;who<2;who++){
   if(who===excluded||!recoveryTargets[who])continue;
   if(recoveryDelay[who]>0){recoveryDelay[who]=Math.max(0,recoveryDelay[who]-dt);continue}
   const attacking=who===0?humanPositionMode==='net':cpuPositionMode==='net';
-  if(movePlayerTo(who,recoveryTargets[who],dt,attacking?CFG.tactics.attackMoveMultiplier:CFG.movement.recoveryMultiplier))recoveryTargets[who]=null;
+  if(movePlayerTo(who,recoveryTargets[who],dt,attacking?CFG.tactics.attackMoveMultiplier:CFG.movement.recoveryMultiplier)){recoveryTargets[who]=null;if(who===1&&!attacking)cpuTacticState='baseline'}
  }
 }
 function viewEnd(){if(screenLayout)fitCourtCamera(camera,screenLayout,ends[0])}
 function prepareServe(){
  for(const p of players)p.userData.rig.splitStep=null;
- cpuPositionMode='baseline';
+ cpuPositionMode='baseline';cpuNetRushRemaining=0;cpuTacticState='baseline';
  clearReturn();cancelHold();plan=null;recoveryTargets=[null,null];recoveryDelay=[0,0];contactGuide.visible=false;elapsed=0;acc=0;decision=null;bounces=0;netTouched=false;isServe=true;selected='flat';serveSpin={x:0,y:0};pendingStroke=null;
  if(match.decidingPoint&&match.sideOverride===null){
   if(match.server===1){phase='side';$('sideMenu').hidden=false;say('金球决胜：由接发方选择一区或二区');ui();return}
@@ -307,7 +310,10 @@ function launchStroke(who,type,power,perfect=false,pad=null,returnChoice=null){
  showShotSpeed(who,type,serving,perfect,physicalBall.velocity);
  sounds.hit({type,serving,perfect,speed:speedKmh(physicalBall.velocity)});
  if(!serving)spendEnergy(who,cost(power,type)*(perfect?CFG.stamina.perfectCostMultiplier:1));lastHitter=who;bounces=0;decision=null;netTouched=false;elapsed=0;acc=0;phase='flight';plan=predict();
- if(who===1&&!serving)cpuPositionMode=returnChoice?.approach?'net':returnChoice?.tactic==='defend'?'baseline':cpuPositionMode;
+ if(who===1&&!serving){
+  if(returnChoice?.approach&&cpuPositionMode!=='net'){cpuPositionMode='net';cpuTacticState='rush';cpuNetRushRemaining=CFG.movement.netRushDistance;spendEnergy(1,CFG.stamina.netRushCost)}
+  else if(returnChoice?.tactic==='defend'){cpuPositionMode='baseline';cpuTacticState='retreat';cpuNetRushRemaining=0}
+ }
  const positionMode=who===0?humanPositionMode:cpuPositionMode;
  recoveryTargets[1-who]=null;recoveryTargets[who]=recoveryPosition({end:ends[who],opponentContact:plan?.ball||shot.landing||target,strikePosition:players[who].position,mode:positionMode});recoveryDelay[who]=positionMode==='net'?0:CFG.movement.recoveryDelay;updateContactGuide();
  if(plan){
@@ -427,7 +433,7 @@ function openMenu(){cancelHold();paused=true;$('startMenu').hidden=false;$('main
 function startNewMatch(){
  const formats={standard:{gamesToWin:6,noAd:false},short:{gamesToWin:4,noAd:false},golden:{gamesToWin:4,noAd:true},practice:{gamesToWin:2,noAd:true}},format=formats[$('formatSetting').value]||formats.standard;
  cancelHold();humanCharacter=cloneCharacter(draftCharacter('human'));opponentCharacter=cloneCharacter(draftCharacter('cpu'));applyPlayerStyle(human,humanCharacter);applyPlayerStyle(cpu,opponentCharacter);
- match=new TennisMatch(format);difficulty=$('difficultySetting').value;started=true;paused=false;humanPositionMode='baseline';cpuPositionMode='baseline';netRushRemaining=0;ends=[1,-1];viewEnd();energy.reset();stamina=energy.values;displayedStamina=[CFG.stamina.full,CFG.stamina.full];trailingStamina=[CFG.stamina.full,CFG.stamina.full];turn=1;serveAttempt=1;pendingStroke=null;lastShotSpeed=null;$('shotSpeed').hidden=true;for(const p of players)p.userData.rig.swing=null;$('startMenu').hidden=true;$('sideMenu').hidden=true;prepareServe();
+ match=new TennisMatch(format);difficulty=$('difficultySetting').value;started=true;paused=false;humanPositionMode='baseline';cpuPositionMode='baseline';netRushRemaining=0;cpuNetRushRemaining=0;cpuTacticState='baseline';ends=[1,-1];viewEnd();energy.reset();stamina=energy.values;displayedStamina=[CFG.stamina.full,CFG.stamina.full];trailingStamina=[CFG.stamina.full,CFG.stamina.full];turn=1;serveAttempt=1;pendingStroke=null;lastShotSpeed=null;$('shotSpeed').hidden=true;for(const p of players)p.userData.rig.swing=null;$('startMenu').hidden=true;$('sideMenu').hidden=true;prepareServe();
 }
 $('mainAction').onclick=()=>started&&match.winner===null?resumeMatch():startNewMatch();
 for(const button of document.querySelectorAll('[data-open-page]'))button.onclick=()=>showMenuPage(button.dataset.openPage);

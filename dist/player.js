@@ -41,8 +41,12 @@ export function createPlayer(scene,color,z,accent) {
   const stringMat=new THREE.LineBasicMaterial({color:'#e6f0d7',transparent:true,opacity:.8});
   for(let i=-3;i<=3;i++){const x=i*.055,hy=.28*Math.sqrt(1-x*x/(.22*.22));const vertical=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x,-hy,0),new THREE.Vector3(x,hy,0)]),stringMat);strings.add(vertical);const y=i*.065,hx=.22*Math.sqrt(1-y*y/(.28*.28));strings.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-hx,y,0),new THREE.Vector3(hx,y,0)]),stringMat));}
   const trail=new THREE.Line(new THREE.BufferGeometry(),new THREE.LineBasicMaterial({color:'#dfef9a',transparent:true,opacity:.65}));trail.frustumCulled=false;scene.add(trail);
-  root.userData.rig={body,hips,chest,head,leftLeg,rightLeg,leftArm,rightArm,racket,strings,trail,trailPoints:[],swing:null,clock:0,gait:0,velocity:new THREE.Vector3(),last:root.position.clone()};
+  root.userData.rig={body,hips,chest,head,leftLeg,rightLeg,leftArm,rightArm,racket,strings,trail,shirt,trim,trailPoints:[],swing:null,clock:0,gait:0,velocity:new THREE.Vector3(),last:root.position.clone()};
   return root;
+}
+export function applyPlayerStyle(player,{colors=['#47734a','#d3df91'],build=1}={}){
+  const rig=player.userData.rig;rig.shirt.color.set(colors[0]);rig.trim.color.set(colors[1]);
+  rig.body.scale.set(build,1+(build-1)*.22,build);rig.trail.material.color.set(colors[1]);
 }
 const READY=READY_POSE;
 export function beginStroke(player,{type='flat',backhand=false,serve=false,pad={x:0,y:0}}={}){

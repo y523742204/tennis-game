@@ -64,6 +64,7 @@ export const CONFIG={
     perfectServeErrorMultiplier:.35, // Perfect 降低一发误差，仍不保证进球
     flatServeSpinThreshold:.25, // 上旋量达到此值后不使用平击一发额外误差
     serveSpinErrorReduction:.5, // 侧旋对平击一发误差的最大减免比例
+    netPaceThreshold:20,netPaceScatterPerSpeed:.035,netPaceScatterMax:1.25, // 截击/高压处理高速来球的额外落点波动
   },
   physics:{
     step:1/240, // 固定物理步长，秒
@@ -111,12 +112,21 @@ export const CONFIG={
   ai:{
     serveWait:1.2, // 电脑准备发球等待时间
     servePowerMin:55,servePowerRange:15, // 电脑发球力量范围
-    returnPowerMin:45,returnPowerRange:30, // 电脑回球力量范围
     serveSideRange:1.4, // 发球左右旋随机范围
     secondServeTop:.65,firstServeTopRange:.45, // 二发上旋、一发上旋范围
     serveXMin:1.4,serveXRange:1.8, // 发球目标横向距离及随机范围
     serveDepthMin:5.7,serveDepthRange:.4, // 发球目标纵深及随机范围，避免浅发球
-    returnWidth:7,returnDepthMin:6,returnDepthRange:4, // 回球落点范围
+    // 难度同时影响战术进攻幅度、空当识别阈值和执行误差；跑速仍在 movement 中配置。
+    returnProfiles:{
+      easy:{widthMargin:1.15,depthMargin:2.1,openThreshold:1.6,attackPower:62,controlPower:55,defensePower:42,scatter:.55,perfectSetup:.42,perfectChance:.25},
+      normal:{widthMargin:.65,depthMargin:1.4,openThreshold:1.1,attackPower:74,controlPower:63,defensePower:48,scatter:.3,perfectSetup:.32,perfectChance:.55},
+      hard:{widthMargin:.4,depthMargin:1,openThreshold:.7,attackPower:85,controlPower:69,defensePower:50,scatter:.14,perfectSetup:.24,perfectChance:.8},
+    },
+    defenseDepthMargin:.5,defenseWidthMargin:.25,defenseHeight:.75,
+    backhandOffset:2.2, // 当前角色均为右手持拍，向对手反手侧施压
+    returnPowerJitter:3, // 战术确定后的小幅执行波动
+    rescueSpeedMultiplier:1.38,rescueStaminaCost:16,rescueMinimumStamina:24, // 差一点够不到时消耗体力冲刺救球
+    approachContactDepth:7,approachOpponentOffset:1.5,approachMinimumStamina:42, // 短球且对手失位时主动上网
   },
   tactics:{
     attackDepth:3.2,baselineDepth:11.2, // 主动上网/回防底线的站位纵深，距网米数

@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {CONFIG as cfg} from '../dist/config.js';
-import {serveVelocityError} from '../dist/accuracy.js';
+import {serveVelocityError,netShotTargetError} from '../dist/accuracy.js';
 import {solveShot,speedKmh} from '../dist/shot.js';
 import {fatigueTarget,staminaEffects} from '../dist/stamina.js';
 import {validServiceLanding} from '../dist/rules.js';
@@ -46,4 +46,14 @@ test('low stamina produces substantially more out balls with seeded target sampl
  t.diagnostic(`target error out rate: full ${fresh}, stamina40 ${middle}, stamina15 ${low}`);
  assert.equal(fresh,0);assert.ok(low>.25);assert.ok(low>middle+.1);
  assert.ok(staminaEffects(40).scatter>1);assert.ok(staminaEffects(15).scatter>2.9);
+});
+test('net-shot target instability grows with incoming pace and leaves groundstrokes unchanged',()=>{
+ const target={x:0,z:-8},random=()=>1;
+ assert.deepEqual(netShotTargetError(target,'flat',{x:0,y:0,z:50},random),target);
+ assert.deepEqual(netShotTargetError(target,'volley',{x:0,y:0,z:20},random),target);
+ const medium=netShotTargetError(target,'volley',{x:0,y:0,z:30},random);
+ const fast=netShotTargetError(target,'smash',{x:0,y:0,z:50},random);
+ const deviation=point=>Math.hypot(point.x-target.x,point.z-target.z);
+ assert.ok(deviation(medium)>0);assert.ok(deviation(fast)>deviation(medium));
+ assert.ok(deviation(fast)<=cfg.shot.netPaceScatterMax+.0001);
 });

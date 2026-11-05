@@ -10,3 +10,10 @@ export function serveVelocityError(velocity,{serving=false,attempt=1,type='flat'
   const heading=Math.atan2(velocity.x,velocity.z)+yaw,elevation=Math.atan2(velocity.y,horizontal)+pitch;
   return {x:Math.sin(heading)*Math.cos(elevation)*speed,y:Math.sin(elevation)*speed,z:Math.cos(heading)*Math.cos(elevation)*speed};
 }
+export function netShotTargetError(target,type,incomingVelocity,random=Math.random){
+  if(!['volley','smash'].includes(type))return {...target};
+  const s=CFG.shot,pace=Math.hypot(incomingVelocity.x||0,incomingVelocity.y||0,incomingVelocity.z||0);
+  const radius=Math.min(s.netPaceScatterMax,Math.max(0,pace-s.netPaceThreshold)*s.netPaceScatterPerSpeed)*Math.sqrt(random());
+  const angle=random()*Math.PI*2;
+  return {x:target.x+Math.cos(angle)*radius,z:target.z+Math.sin(angle)*radius};
+}

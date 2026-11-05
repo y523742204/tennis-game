@@ -10,7 +10,7 @@ import {ReturnStrategy} from './return-strategy.js';
 import {chooseComputerReturn,selectComputerContact} from './computer-strategy.js';
 import {selectContact,recoveryPosition} from './tactics.js';
 import {createPlayer,applyPlayerStyle,beginStroke,updatePlayer,strokeProgress} from './player.js';
-import {CHARACTERS,DEFAULT_CHARACTER,characterById,abilityFactor,radarMarkup} from './characters.js';
+import {CHARACTERS,DEFAULT_CHARACTER,AXES,characterById,createCustomCharacter,adjustStats,radarMarkup} from './characters.js';
 import {servePad,aerodynamicForce,PHYSICS_STEP,flightTimeScale} from './flight.js';
 import {TennisMatch,validServiceLanding} from './rules.js';
 import * as C from './vendor/cannon-es.js';
@@ -38,8 +38,8 @@ const netHalfWidth=court.doublesHalfWidth+.914;
 for(let i=0;i<=40;i++)box(.018,1.05,.018,'#c9d1bd',-netHalfWidth+i*netHalfWidth*2/40,.5,0);
 for(let i=0;i<8;i++)box(netHalfWidth*2,.018,.018,'#a5b69c',0,i*.14,0);
 box(netHalfWidth*2,.08,.06,'#f4f0d8',0,1.1);for(const x of [-netHalfWidth,netHalfWidth])box(.12,1.4,.12,'#dde2ca',x,.6);
-let humanCharacter=characterById(DEFAULT_CHARACTER);
-const human=createPlayer(scene,CFG.view.humanColor,10.5,CFG.view.humanAccent),cpu=createPlayer(scene,CFG.view.cpuColor,-10.5,CFG.view.cpuAccent);applyPlayerStyle(human,humanCharacter);const ball=new THREE.Mesh(new THREE.SphereGeometry(CFG.physics.ballRadius,16,16),new THREE.MeshStandardMaterial({color:'#e2f76a',emissive:'#687a16',emissiveIntensity:.3}));ball.castShadow=true;scene.add(ball);for(const axis of [0,Math.PI/2]){const seam=new THREE.Mesh(new THREE.TorusGeometry(CFG.physics.ballRadius+.001,.006,5,36),new THREE.MeshStandardMaterial({color:'#fbffe5',roughness:.8}));seam.rotation.x=axis;ball.add(seam);}
+let humanCharacter=characterById(DEFAULT_CHARACTER),opponentCharacter=characterById(DEFAULT_CHARACTER);
+const human=createPlayer(scene,CFG.view.humanColor,10.5,CFG.view.humanAccent),cpu=createPlayer(scene,CFG.view.cpuColor,-10.5,CFG.view.cpuAccent);applyPlayerStyle(human,humanCharacter);applyPlayerStyle(cpu,opponentCharacter);const ball=new THREE.Mesh(new THREE.SphereGeometry(CFG.physics.ballRadius,16,16),new THREE.MeshStandardMaterial({color:'#e2f76a',emissive:'#687a16',emissiveIntensity:.3}));ball.castShadow=true;scene.add(ball);for(const axis of [0,Math.PI/2]){const seam=new THREE.Mesh(new THREE.TorusGeometry(CFG.physics.ballRadius+.001,.006,5,36),new THREE.MeshStandardMaterial({color:'#fbffe5',roughness:.8}));seam.rotation.x=axis;ball.add(seam);}
 const shadow=new THREE.Mesh(new THREE.CircleGeometry(.26,24),new THREE.MeshBasicMaterial({color:'#112c1a',transparent:true,opacity:.25,depthWrite:false}));shadow.rotation.x=-Math.PI/2;shadow.visible=false;
 const world=new C.World({gravity:new C.Vec3(0,-CFG.physics.gravity,0)});world.solver.iterations=CFG.physics.solverIterations;
 const felt=new C.Material(),grass=new C.Material(),netMat=new C.Material();
@@ -56,10 +56,30 @@ let match=new TennisMatch(),difficulty=CFG.match.difficulty,phase='menu',started
 let lastHitter=0,bounces=0,decision=null,isServe=true,serveAttempt=1,netTouched=false,flightIsServe=true;
 let humanPositionMode='baseline',flightSamples=[],netRushRemaining=0;
 let plan=null,elapsed=0,acc=0,aiWait=0,turn=1,aim={x:-2,z:-4},selected='top',gauge=.5,dirty=true,hold=null;
-function previewCharacter(id){applyPlayerStyle(human,characterById(id))}
-$('characterSelect').innerHTML=CHARACTERS.map(character=>`<label class="character-card"><input type="radio" name="character" value="${character.id}" ${character.id===DEFAULT_CHARACTER?'checked':''}><span>${radarMarkup(character)}</span><span><b><i class="character-swatch" style="background:${character.colors[0]}"></i>${character.name}</b><small>M${character.stats.M} T${character.stats.T} D${character.stats.D} J${character.stats.J} F${character.stats.F}</small></span></label>`).join('');
-$('characterSelect').addEventListener('change',event=>previewCharacter(event.target.value));
-function spendEnergy(who,amount){energy.spend(who,amount*(who===0?1/abilityFactor(humanCharacter,'T',.1):1))}
+const customCharacters={human:createCustomCharacter('human'),cpu:createCustomCharacter('cpu')};
+const draftCharacterIds={human:DEFAULT_CHARACTER,cpu:DEFAULT_CHARACTER};
+let characterSide='human',carouselIndex=CHARACTERS.findIndex(character=>character.id===DEFAULT_CHARACTER),carouselTimer=null;
+const allCharacters=side=>[...CHARACTERS,customCharacters[side]];
+const draftCharacter=side=>allCharacters(side).find(character=>character.id===draftCharacterIds[side])||CHARACTERS.at(-1);
+const cloneCharacter=character=>({...character,stats:{...character.stats},colors:[...character.colors]});
+function modelMarkup(character){return `<div class="character-model" style="--shirt:${character.colors[0]};--accent:${character.colors[1]};--build:${character.build}"><i class="head"></i><i class="torso"></i><i class="legs"></i><i class="racket"></i></div>`}
+function renderCharacterCarousel({center=true}={}){
+ const characters=allCharacters(characterSide),selected=draftCharacterIds[characterSide];carouselIndex=Math.max(0,characters.findIndex(character=>character.id===selected));
+ $('characterCarousel').innerHTML=characters.map((character,index)=>`<button class="character-slide ${character.id===selected?'selected':''}" data-character-id="${character.id}" data-index="${index}" aria-label="选择${character.name}">${modelMarkup(character)}<h3>${character.name}</h3>${radarMarkup(character)}</button>`).join('');
+ $('characterPosition').textContent=`${carouselIndex+1} / ${characters.length}`;
+ const custom=characters[carouselIndex]?.custom;$('customEditor').hidden=!custom;
+ if(custom){$('customName').value=characters[carouselIndex].name;$('customRadar').innerHTML=radarMarkup(characters[carouselIndex],{interactive:true})}
+ if(center)requestAnimationFrame(()=>$('characterCarousel').children[carouselIndex]?.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'}));
+}
+function previewDraftCharacter(){const character=draftCharacter(characterSide);applyPlayerStyle(characterSide==='human'?human:cpu,character)}
+function chooseCharacterIndex(index){const characters=allCharacters(characterSide);carouselIndex=Math.max(0,Math.min(characters.length-1,index));draftCharacterIds[characterSide]=characters[carouselIndex].id;previewDraftCharacter();renderCharacterCarousel()}
+function setCustomStat(side,key,requested){
+ customCharacters[side].stats=adjustStats(customCharacters[side].stats,key,requested);
+}
+function updateCustomRadar(){const custom=customCharacters[characterSide];$('customRadar').innerHTML=radarMarkup(custom,{interactive:true});const slide=$('characterCarousel').querySelector(`[data-character-id="${custom.id}"]`);if(slide){const old=slide.querySelector('.ability-radar');old.outerHTML=radarMarkup(custom)}}
+function attributeValue(who,key){const character=who===0?humanCharacter:opponentCharacter,factor=who===1?({easy:.9,normal:1,hard:1.1}[difficulty]||1):1;return character.stats[key]*factor}
+function abilityMultiplier(who,key,step=.08){return 1+(attributeValue(who,key)-4)*step}
+function spendEnergy(who,amount){energy.spend(who,amount/abilityMultiplier(who,'T',.1))}
 const wheel=$('wheel'),canvas=renderer.domElement;
 let screenLayout=null,previousViewport=null;
 function readSafeArea(){const style=getComputedStyle(document.documentElement);return Object.fromEntries(['top','right','bottom','left'].map(side=>[side,parseFloat(style.getPropertyValue('--safe-'+side))||0]))}
@@ -184,8 +204,8 @@ function simulation({floorEnabled=false,netEnabled=false,origin=null}={}){
 }
 function trajectory(who,type,target,power,perfect=false,pad=null,origin=null){
  const p=origin||physicalBall.position;
- const ability=who===0?(pad?'F':['volley','smash'].includes(type)?'J':'D'):null;
- const adjustedPower=ability?power+(humanCharacter.stats[ability]-4)*4:power;
+ const ability=pad?'F':['volley','smash'].includes(type)?'J':'D';
+ const adjustedPower=power+(attributeValue(who,ability)-4)*4;
  const solved=solveShot(p,target,type,adjustedPower,perfect,pad,stamina[who]);
  const v=new C.Vec3(solved.v.x,solved.v.y,solved.v.z),spin=solved.spin,n=Math.round(solved.time/PHYSICS_STEP);
  // Trace with court and net colliders, using exactly the live fixed-step forces.
@@ -194,7 +214,7 @@ function trajectory(who,type,target,power,perfect=false,pad=null,origin=null){
  for(let i=0;i<n+100;i++){if(i%3===0)points.push(new THREE.Vector3(b.position.x,b.position.y,b.position.z));forces(b);w.step(PHYSICS_STEP);if(landing&&points.length-firstBounce>22)break;}
  return {v,spin,points,landing};
 }
-function runSpeed(who){return (who===0?CFG.movement.humanSpeed*abilityFactor(humanCharacter,'M'):CFG.movement.cpuSpeed[difficulty])*staminaEffects(stamina[who]).movement}
+function runSpeed(who){return (who===0?CFG.movement.humanSpeed:CFG.movement.cpuSpeed[difficulty])*abilityMultiplier(who,'M')*staminaEffects(stamina[who]).movement}
 function predict(){
  flightSamples=[];
  const {w,b,ground}=simulation({floorEnabled:true,netEnabled:true});let bounce=0,landing=null,predictedTime=0;const receiver=1-lastHitter,samples=[];
@@ -400,11 +420,29 @@ function updateVisuals(now,dt){
 function next(){if(phase==='end'){openMenu();return}if(['point','fault'].includes(phase)&&!paused)prepareServe()}
 canvas.addEventListener('click',e=>{if(e.isPrimary===false)return;if(ignoreNextClick){ignoreNextClick=false;return}if(paused&&$('startMenu').hidden&&$('sideMenu').hidden){togglePause();return}if(['point','fault','end'].includes(phase))next()});
 function togglePause(){if(!started||!$('startMenu').hidden||!$('sideMenu').hidden)return;cancelHold();paused=!paused;say(paused?'已暂停 · P 或点击球场恢复比赛':phase==='choose'?'长按球场准备击球':'比赛继续');ui()}
-addEventListener('keydown',e=>{if(hold?.ready&&hold.mode==='rally'&&['ArrowLeft','ArrowRight','ArrowUp'].includes(e.code)){e.preventDefault();selected=e.code==='ArrowUp'?'top':e.code==='ArrowLeft'?'flat':'slice';updateNodes();dirty=true;return}if(hold?.ready&&hold.mode==='serve'&&['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home'].includes(e.code)){e.preventDefault();serveSpin=e.code==='Home'?{x:0,y:0}:servePad(serveSpin.x+(e.code==='ArrowRight'?CFG.input.keyboardSpinStep:e.code==='ArrowLeft'?-CFG.input.keyboardSpinStep:0),serveSpin.y+(e.code==='ArrowUp'?CFG.input.keyboardSpinStep:e.code==='ArrowDown'?-CFG.input.keyboardSpinStep:0));updateServeDial();dirty=true;return}if(e.code==='Escape'&&started){if($('startMenu').hidden)openMenu();else $('resume').click();return}if(e.target.matches('input,select,button'))return;if(e.code==='KeyP')togglePause();if(e.code==='Space'){e.preventDefault();next()}});
-function openMenu(){cancelHold();paused=true;$('startMenu').hidden=false;$('resume').hidden=!started||match.winner!==null;ui()}
-$('gamesSetting').value=String(CFG.match.gamesToWin);$('difficultySetting').value=CFG.match.difficulty;document.querySelector('input[name="scoring"][value="'+(CFG.match.noAd?'golden':'ad')+'"]').checked=true;
-$('resume').onclick=()=>{applyPlayerStyle(human,humanCharacter);$('startMenu').hidden=true;paused=false;dirty=true;ui()};
-$('setup').onsubmit=e=>{e.preventDefault();cancelHold();humanCharacter=characterById(document.querySelector('input[name="character"]:checked')?.value);applyPlayerStyle(human,humanCharacter);match=new TennisMatch({gamesToWin:Number($('gamesSetting').value),noAd:document.querySelector('input[name="scoring"]:checked').value==='golden'});difficulty=$('difficultySetting').value;started=true;paused=false;humanPositionMode='baseline';cpuPositionMode='baseline';netRushRemaining=0;ends=[1,-1];viewEnd();energy.reset();stamina=energy.values;displayedStamina=[CFG.stamina.full,CFG.stamina.full];trailingStamina=[CFG.stamina.full,CFG.stamina.full];turn=1;serveAttempt=1;pendingStroke=null;lastShotSpeed=null;$('shotSpeed').hidden=true;for(const p of players)p.userData.rig.swing=null;$('startMenu').hidden=true;$('sideMenu').hidden=true;prepareServe()};
+addEventListener('keydown',e=>{if(hold?.ready&&hold.mode==='rally'&&['ArrowLeft','ArrowRight','ArrowUp'].includes(e.code)){e.preventDefault();selected=e.code==='ArrowUp'?'top':e.code==='ArrowLeft'?'flat':'slice';updateNodes();dirty=true;return}if(hold?.ready&&hold.mode==='serve'&&['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home'].includes(e.code)){e.preventDefault();serveSpin=e.code==='Home'?{x:0,y:0}:servePad(serveSpin.x+(e.code==='ArrowRight'?CFG.input.keyboardSpinStep:e.code==='ArrowLeft'?-CFG.input.keyboardSpinStep:0),serveSpin.y+(e.code==='ArrowUp'?CFG.input.keyboardSpinStep:e.code==='ArrowDown'?-CFG.input.keyboardSpinStep:0));updateServeDial();dirty=true;return}if(e.code==='Escape'&&started){if($('startMenu').hidden)openMenu();else if(!$('mainMenu').hidden)resumeMatch();else showMenuPage('mainMenu');return}if(e.target.matches('input,select,button'))return;if(e.code==='KeyP')togglePause();if(e.code==='Space'){e.preventDefault();next()}});
+function showMenuPage(id){for(const page of document.querySelectorAll('.menu-page'))page.hidden=page.id!==id;document.querySelector('.home-card').scrollTop=0;if(id==='characterPage'){renderCharacterCarousel();previewDraftCharacter()}}
+function resumeMatch(){if(!started||match.winner!==null)return;applyPlayerStyle(human,humanCharacter);applyPlayerStyle(cpu,opponentCharacter);$('startMenu').hidden=true;paused=false;dirty=true;ui()}
+function openMenu(){cancelHold();paused=true;$('startMenu').hidden=false;$('mainAction').textContent=started&&match.winner===null?'回到比赛':'开始比赛';showMenuPage('mainMenu');ui()}
+function startNewMatch(){
+ const formats={standard:{gamesToWin:6,noAd:false},short:{gamesToWin:4,noAd:false},golden:{gamesToWin:4,noAd:true},practice:{gamesToWin:2,noAd:true}},format=formats[$('formatSetting').value]||formats.standard;
+ cancelHold();humanCharacter=cloneCharacter(draftCharacter('human'));opponentCharacter=cloneCharacter(draftCharacter('cpu'));applyPlayerStyle(human,humanCharacter);applyPlayerStyle(cpu,opponentCharacter);
+ match=new TennisMatch(format);difficulty=$('difficultySetting').value;started=true;paused=false;humanPositionMode='baseline';cpuPositionMode='baseline';netRushRemaining=0;ends=[1,-1];viewEnd();energy.reset();stamina=energy.values;displayedStamina=[CFG.stamina.full,CFG.stamina.full];trailingStamina=[CFG.stamina.full,CFG.stamina.full];turn=1;serveAttempt=1;pendingStroke=null;lastShotSpeed=null;$('shotSpeed').hidden=true;for(const p of players)p.userData.rig.swing=null;$('startMenu').hidden=true;$('sideMenu').hidden=true;prepareServe();
+}
+$('mainAction').onclick=()=>started&&match.winner===null?resumeMatch():startNewMatch();
+for(const button of document.querySelectorAll('[data-open-page]'))button.onclick=()=>showMenuPage(button.dataset.openPage);
+for(const button of document.querySelectorAll('[data-menu-back]'))button.onclick=()=>showMenuPage('mainMenu');
+$('exitMatch').onclick=()=>{if(!started){window.close();return}cancelHold();started=false;paused=true;phase='menu';plan=null;recoveryTargets=[null,null];contactGuide.visible=false;marker.visible=false;aimLine.visible=false;$('mainAction').textContent='开始比赛';ui()};
+$('characterCarousel').onclick=event=>{const card=event.target.closest('[data-index]');if(card)chooseCharacterIndex(Number(card.dataset.index))};
+$('characterCarousel').addEventListener('scroll',()=>{clearTimeout(carouselTimer);carouselTimer=setTimeout(()=>{const box=$('characterCarousel').getBoundingClientRect(),center=box.left+box.width/2,cards=[...$('characterCarousel').children];const closest=cards.reduce((best,card,index)=>Math.abs(card.getBoundingClientRect().left+card.offsetWidth/2-center)<best.distance?{index,distance:Math.abs(card.getBoundingClientRect().left+card.offsetWidth/2-center)}:best,{index:0,distance:Infinity});if(closest.index!==carouselIndex)chooseCharacterIndex(closest.index)},120)});
+$('previousCharacter').onclick=()=>chooseCharacterIndex(carouselIndex-1);$('nextCharacter').onclick=()=>chooseCharacterIndex(carouselIndex+1);
+for(const tab of document.querySelectorAll('[data-side-tab]'))tab.onclick=()=>{characterSide=tab.dataset.sideTab;for(const node of document.querySelectorAll('[data-side-tab]')){const active=node===tab;node.classList.toggle('active',active);node.setAttribute('aria-selected',String(active))}renderCharacterCarousel();previewDraftCharacter()};
+$('customName').oninput=()=>{const custom=customCharacters[characterSide];custom.name=$('customName').value.trim()|| (characterSide==='human'?'我的选手':'自定义对手');const heading=$('characterCarousel').querySelector(`[data-character-id="${custom.id}"] h3`);if(heading)heading.textContent=custom.name};
+let radarDrag=null;
+$('customRadar').addEventListener('pointerdown',event=>{const handle=event.target.closest('.radar-handle');if(!handle)return;event.preventDefault();radarDrag={id:event.pointerId,key:handle.dataset.axis,svg:handle.ownerSVGElement};$('customRadar').setPointerCapture(event.pointerId)});
+$('customRadar').addEventListener('pointermove',event=>{if(!radarDrag||event.pointerId!==radarDrag.id)return;const rect=radarDrag.svg.getBoundingClientRect(),x=(event.clientX-rect.left)/rect.width*120-10,y=(event.clientY-rect.top)/rect.height*120-10,index=AXES.findIndex(axis=>axis.key===radarDrag.key),angle=-Math.PI/2+index*Math.PI*2/AXES.length,projection=(x-50)*Math.cos(angle)+(y-50)*Math.sin(angle),value=projection/42*6;setCustomStat(characterSide,radarDrag.key,value);$('customRadar').innerHTML=radarMarkup(customCharacters[characterSide],{interactive:true})});
+$('customRadar').addEventListener('pointerup',event=>{if(!radarDrag||event.pointerId!==radarDrag.id)return;radarDrag=null;renderCharacterCarousel({center:false})});
+$('difficultySetting').value=CFG.match.difficulty;
 for(const node of document.querySelectorAll('[data-side]'))node.onclick=()=>{match.sideOverride=Number(node.dataset.side);$('sideMenu').hidden=true;prepareServe()};
 addEventListener('blur',()=>{cancelHold();if(phase==='flight'||phase==='ai'||phase==='stroke'){paused=true;say('已暂停 · P 继续');ui()}});
  document.addEventListener('visibilitychange',()=>{if(document.hidden){cancelHold();if(started&&['flight','ai','stroke'].includes(phase)){paused=true;ui()}}});
